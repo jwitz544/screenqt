@@ -210,131 +210,38 @@ void PageView::loadSampleText()
     };
     
     insertLine("INT. COFFEE SHOP - DAY", 0);
-    insertLine("", 1);
     insertLine("A small, cozy coffee shop. SARAH (30s, tired but determined) sits at a corner table with her laptop. The place is nearly empty except for a BARISTA wiping down the counter.", 1);
-    insertLine("", 1);
     insertLine("Sarah's fingers hover over the keyboard. She looks at the screen, then out the window, then back to the screen.", 1);
-    insertLine("", 1);
     insertLine("SARAH", 2);
     insertLine("(to herself)", 4);
     insertLine("This is it. Just write something.", 3);
-    insertLine("", 1);
-    insertLine("She types furiously for a moment, then stops. Deletes everything.", 1);
-    insertLine("", 1);
-    insertLine("The door chimes. MIKE (40s, casual but put-together) enters, spots Sarah, and walks over.", 1);
-    insertLine("", 1);
-    insertLine("MIKE", 2);
-    insertLine("Still working on that screenplay?", 3);
-    insertLine("", 1);
-    insertLine("SARAH", 2);
-    insertLine("Trying to. It's harder than I thought.", 3);
-    insertLine("", 1);
-    insertLine("MIKE", 2);
-    insertLine("(sitting down)", 4);
-    insertLine("The first page is always the hardest. What's it about?", 3);
-    insertLine("", 1);
-    insertLine("SARAH", 2);
-    insertLine("A screenwriter who can't write.", 3);
-    insertLine("", 1);
-    insertLine("Mike laughs.", 1);
-    insertLine("", 1);
-    insertLine("MIKE", 2);
-    insertLine("Meta. I like it.", 3);
-    insertLine("", 1);
-    insertLine("SARAH", 2);
-    insertLine("It's torture. Every word feels wrong.", 3);
-    insertLine("", 1);
-    insertLine("MIKE", 2);
-    insertLine("Then write it wrong. You can fix it later.", 3);
-    insertLine("", 1);
-    insertLine("Sarah sighs and closes her laptop.", 1);
-    insertLine("", 1);
-    insertLine("SARAH", 2);
-    insertLine("I need a break. Want to walk?", 3);
-    insertLine("", 1);
-    insertLine("EXT. PARK - LATER", 0);
-    insertLine("", 1);
-    insertLine("Sarah and Mike walk through a busy park. Kids play on swings. A street musician plays guitar.", 1);
-    insertLine("", 1);
-    insertLine("MIKE", 2);
-    insertLine("You know what your problem is?", 3);
-    insertLine("", 1);
-    insertLine("SARAH", 2);
-    insertLine("(defensive)", 4);
-    insertLine("I don't have a problem.", 3);
-    insertLine("", 1);
-    insertLine("MIKE", 2);
-    insertLine("You're overthinking it. Just let the story flow.", 3);
-    insertLine("", 1);
-    insertLine("SARAH", 2);
-    insertLine("Easy for you to say. You finished three screenplays last year.", 3);
-    insertLine("", 1);
-    insertLine("MIKE", 2);
-    insertLine("And they all sucked. But I finished them. That's the point.", 3);
-    insertLine("", 1);
-    insertLine("They walk in silence for a moment.", 1);
-    insertLine("", 1);
-    insertLine("SARAH", 2);
-    insertLine("Maybe you're right. Maybe I just need to stop being so precious about it.", 3);
-    insertLine("", 1);
-    insertLine("MIKE", 2);
-    insertLine("Exactly. Write drunk, edit sober. Hemingway said that.", 3);
-    insertLine("", 1);
-    insertLine("SARAH", 2);
-    insertLine("(smiling)", 4);
-    insertLine("I don't think he actually said that.", 3);
-    insertLine("", 1);
-    insertLine("MIKE", 2);
-    insertLine("Well, he should have.", 3);
-    insertLine("", 1);
-    insertLine("INT. SARAH'S APARTMENT - NIGHT", 0);
-    insertLine("", 1);
-    insertLine("Small, cluttered, but warm. Sarah sits at her desk, laptop open. The cursor blinks on an empty page.", 1);
-    insertLine("", 1);
-    insertLine("She takes a deep breath and starts typing.", 1);
-    insertLine("", 1);
-    insertLine("SARAH (V.O.)", 2);
-    insertLine("The first step is always the hardest. But once you start, the words just come.", 3);
-    insertLine("", 1);
-    insertLine("Words fill the screen. Sarah smiles.", 1);
-    insertLine("", 1);
-    insertLine("INT. COFFEE SHOP - THE NEXT DAY", 0);
-    insertLine("", 1);
-    insertLine("Sarah sits at the same table, typing away. Mike enters and approaches.", 1);
-    insertLine("", 1);
-    insertLine("MIKE", 2);
-    insertLine("How's it going?", 3);
-    insertLine("", 1);
-    insertLine("SARAH", 2);
-    insertLine("(beaming)", 4);
-    insertLine("I wrote twenty pages last night.", 3);
-    insertLine("", 1);
-    insertLine("MIKE", 2);
-    insertLine("That's amazing! See? I told you.", 3);
-    insertLine("", 1);
-    insertLine("SARAH", 2);
-    insertLine("They're probably terrible, but I don't care. I finished something.", 3);
-    insertLine("", 1);
-    insertLine("Mike sits down across from her.", 1);
-    insertLine("", 1);
-    insertLine("MIKE", 2);
-    insertLine("That's all that matters. What's next?", 3);
-    insertLine("", 1);
-    insertLine("SARAH", 2);
-    insertLine("Rewrite. Then rewrite again. Then maybe show it to someone.", 3);
-    insertLine("", 1);
-    insertLine("MIKE", 2);
-    insertLine("You'll show it to me, right?", 3);
-    insertLine("", 1);
-    insertLine("SARAH", 2);
-    insertLine("Maybe. If you promise not to laugh.", 3);
-    insertLine("", 1);
-    insertLine("MIKE", 2);
-    insertLine("I promise.", 3);
-    insertLine("", 1);
-    insertLine("They share a smile.", 1);
-    insertLine("", 1);
-    insertLine("FADE OUT.", 6);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
+    insertLine("Action", 1);
     
     cursor.endEditBlock();
     m_editor->moveCursor(QTextCursor::Start);
@@ -429,17 +336,102 @@ bool PageView::exportToPdf(const QString &filePath)
     writer.setPageSize(QPageSize::Letter);
     writer.setResolution(300); // High quality output
     
-    // Paint the document onto the PDF
-    QPainter painter(&writer);
-    painter.setFont(m_editor->font());
+    // Set margins: left 1.5", others 1"
+    QMarginsF margins(1.5, 1.0, 1.0, 1.0); // in inches
+    writer.setPageMargins(margins, QPageLayout::Inch);
     
-    // Draw the pages
+    // Start painting
+    QPainter painter(&writer);
+    
+    // Get the paintable area (already accounts for margins)
+    QRect paintRect = writer.pageLayout().paintRectPixels(writer.resolution());
+    qDebug() << "[PDF] PDF paintable area:" << paintRect;
+    
+    // Get document
     QTextDocument *doc = m_editor->document();
-    QAbstractTextDocumentLayout::PaintContext context;
-    doc->documentLayout()->draw(&painter, context);
+    const int printableH = printableHeightPerPage();
+    const int topMargin = m_printRect.top();
+    
+    qDebug() << "[PDF] Screen printable:" << m_printRect.width() << "x" << printableH;
+    qDebug() << "[PDF] Top margin:" << topMargin;
+    
+    // Calculate scale to fit screen printable area into PDF paintable area
+    qreal scaleX = static_cast<qreal>(paintRect.width()) / m_printRect.width();
+    qreal scaleY = static_cast<qreal>(paintRect.height()) / printableH;
+    qreal scale = qMin(scaleX, scaleY);
+    
+    qDebug() << "[PDF] Scale X:" << scaleX << "Y:" << scaleY << "-> Using:" << scale;
+    
+    // Render each page by clipping the document
+    int totalPages = m_pageCount;
+    qDebug() << "[PDF] Total pages to export:" << totalPages;
+    
+    for (int pageNum = 0; pageNum < totalPages; ++pageNum) {
+        if (pageNum > 0) {
+            qDebug() << "[PDF] Creating new page" << (pageNum + 1);
+            writer.newPage();
+        }
+        
+        qDebug() << "[PDF] ===== DRAWING PAGE" << (pageNum + 1) << "=====";
+        
+        painter.save();
+        painter.scale(scale, scale);
+        
+        // Find where content actually starts on this page
+        // For pages after the first, enforcePageBreaks adds large margins to push blocks to new pages
+        // We need to find the first block that's visible on this page
+        int pageContentStart = 0;
+        int pageContentEnd = printableH;
+        
+        if (pageNum > 0) {
+            // Find the first block whose content appears on this page
+            int currentY = 0;
+            QTextBlock block = doc->begin();
+            while (block.isValid()) {
+                QTextLayout *layout = block.layout();
+                int blockHeight = static_cast<int>(std::ceil(layout->boundingRect().height()));
+                int blockTopMargin = static_cast<int>(block.blockFormat().topMargin());
+                int contentStartY = currentY + blockTopMargin;
+                
+                // If this block's content starts on or after our target page area, use it
+                int expectedPageStart = (printableH + m_pageGap) * pageNum;
+                if (contentStartY >= expectedPageStart) {
+                    pageContentStart = contentStartY;
+                    pageContentEnd = contentStartY + printableH;
+                    qDebug() << "[PDF] Page" << (pageNum + 1) << "first block content at Y=" << contentStartY
+                             << "text:" << block.text().left(40);
+                    break;
+                }
+                
+                currentY += blockTopMargin + blockHeight;
+                block = block.next();
+            }
+        }
+        
+        qDebug() << "[PDF] Page" << (pageNum + 1) << "content range:" << pageContentStart << "-" << pageContentEnd;
+        
+        // Translate to position this page's content at Y=0
+        painter.translate(0, -pageContentStart);
+        
+        // Clip to show only this page's printable content
+        QRectF clipRect(0, pageContentStart, m_printRect.width(), printableH);
+        painter.setClipRect(clipRect);
+        
+        qDebug() << "[PDF] Translate:" << -pageContentStart << "Clip rect:" << clipRect;
+        
+        // Draw the entire document (clipped to current page)
+        QAbstractTextDocumentLayout::PaintContext context;
+        context.clip = clipRect;
+        context.palette.setColor(QPalette::Text, Qt::black);
+        doc->documentLayout()->draw(&painter, context);
+        
+        painter.restore();
+        qDebug() << "[PDF] Page" << (pageNum + 1) << "rendering complete";
+    }
+    
     painter.end();
     
-    qDebug() << "[PageView] PDF export completed";
+    qDebug() << "[PageView] PDF export completed successfully";
     return true;
 }
 
