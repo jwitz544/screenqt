@@ -1,0 +1,15 @@
+{
+  "cmake.generator": "Visual Studio 17 2022",
+  "cmake.configureSettings": {
+    "CMAKE_PREFIX_PATH": "C:/Qt/6.10.1/msvc2022_64",
+    "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+  },
+  "C_Cpp.errorSquiggles": "Enabled",
+  "C_Cpp.default.includePath": [
+    "${workspaceFolder}/include",
+    "C:/Qt/6.10.1/msvc2022_64/include",
+    "C:/Qt/6.10.1/msvc2022_64/include/QtCore",
+    "C:/Qt/6.10.1/msvc2022_64/include/QtGui",
+    "C:/Qt/6.10.1/msvc2022_64/include/QtWidgets"
+  ]
+}
