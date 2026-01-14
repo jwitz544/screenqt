@@ -18,6 +18,7 @@
 #include <QJsonArray>
 #include <QDebug>
 #include <QPdfWriter>
+#include <QTimer>
 #include <cmath>
 
 PageView::PageView(QWidget *parent)
@@ -80,6 +81,14 @@ void PageView::paintEvent(QPaintEvent *event)
         // Draw white rectangle for printable area to ensure text has white background
         QRect printableRect = m_printRect.translated(pageRect.topLeft());
         p.fillRect(printableRect, Qt::white);
+        
+        // Draw page number in top right corner
+        QString pageNumStr = QString::number(i + 1) + ".";
+        QFont pageNumFont("Courier New", 10);
+        p.setFont(pageNumFont);
+        p.setPen(Qt::black);
+        QRect pageNumRect = pageRect.adjusted(0, 10, -20, 0);
+        p.drawText(pageNumRect, Qt::AlignTop | Qt::AlignRight, pageNumStr);
     }
 }
 
@@ -194,61 +203,6 @@ int PageView::pageYOffset(int pageIndex) const
     return 20 + (m_pageRect.height() + m_pageGap) * pageIndex;
 }
 
-void PageView::loadSampleText()
-{
-    qDebug() << "[PageView] Loading sample text";
-    QTextCursor cursor(m_editor->document());
-    cursor.beginEditBlock();
-    
-    // Helper to insert line with element type
-    auto insertLine = [&](const QString &text, int elementType) {
-        cursor.insertText(text);
-        QTextBlock block = cursor.block();
-        block.setUserState(elementType);
-        cursor.insertText("\n");
-        cursor.movePosition(QTextCursor::NextBlock);
-    };
-    
-    insertLine("INT. COFFEE SHOP - DAY", 0);
-    insertLine("A small, cozy coffee shop. SARAH (30s, tired but determined) sits at a corner table with her laptop. The place is nearly empty except for a BARISTA wiping down the counter.", 1);
-    insertLine("Sarah's fingers hover over the keyboard. She looks at the screen, then out the window, then back to the screen.", 1);
-    insertLine("SARAH", 2);
-    insertLine("(to herself)", 4);
-    insertLine("This is it. Just write something.", 3);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    insertLine("Action", 1);
-    
-    cursor.endEditBlock();
-    m_editor->moveCursor(QTextCursor::Start);
-    m_editor->formatDocument();
-    qDebug() << "[PageView] Sample text loaded";
-}
-
 bool PageView::saveToFile(const QString &filePath)
 {
     qDebug() << "[PageView] Saving to:" << filePath;
@@ -285,6 +239,8 @@ bool PageView::saveToFile(const QString &filePath)
 bool PageView::loadFromFile(const QString &filePath)
 {
     qDebug() << "[PageView] Loading from:" << filePath;
+    m_loading = true; // Prevent enforcePageBreaks during load
+    
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
         qDebug() << "[PageView] Failed to open file for reading";
@@ -321,9 +277,25 @@ bool PageView::loadFromFile(const QString &filePath)
     
     cursor.endEditBlock();
     m_editor->moveCursor(QTextCursor::Start);
+    qDebug() << "[PageView::loadFromFile] Before formatDocument, isUndoAvailable:" << m_editor->document()->isUndoAvailable();
     m_editor->formatDocument();
+    qDebug() << "[PageView::loadFromFile] After formatDocument, isUndoAvailable:" << m_editor->document()->isUndoAvailable();
     
-    qDebug() << "[PageView] Loaded" << lines.size() << "lines";
+    // Clear loading flag, disconnect textChanged, run enforcePageBreaks once, clear undo, reconnect
+    QTimer::singleShot(0, this, [this, lines]() {
+        m_loading = false;
+        qDebug() << "[PageView::loadFromFile] Disconnecting textChanged signal";
+        disconnect(m_editor, &QTextEdit::textChanged, this, &PageView::enforcePageBreaks);
+        
+        enforcePageBreaks(); // Run once with undo disabled
+        
+        m_editor->document()->clearUndoRedoStacks();
+        qDebug() << "[PageView::loadFromFile] Loaded" << lines.size() << "lines, loading complete, undo stack cleared, isUndoAvailable:" << m_editor->document()->isUndoAvailable();
+        
+        qDebug() << "[PageView::loadFromFile] Reconnecting textChanged signal";
+        connect(m_editor, &QTextEdit::textChanged, this, &PageView::enforcePageBreaks);
+    });
+    
     return true;
 }
 
@@ -426,6 +398,20 @@ bool PageView::exportToPdf(const QString &filePath)
         doc->documentLayout()->draw(&painter, context);
         
         painter.restore();
+        
+        // Add page number in top right (after restoring from scaled context)
+        painter.save();
+        QFont pageNumFont("Courier New", 12);
+        pageNumFont.setPointSizeF(12);
+        painter.setFont(pageNumFont);
+        painter.setPen(Qt::black);
+        
+        // Position in top right of paintable area
+        QString pageNumStr = QString::number(pageNum + 1) + ".";
+        QRectF pageNumRect(paintRect.width() - 100, 20, 80, 30);
+        painter.drawText(pageNumRect, Qt::AlignRight | Qt::AlignTop, pageNumStr);
+        painter.restore();
+        
         qDebug() << "[PDF] Page" << (pageNum + 1) << "rendering complete";
     }
     
@@ -446,6 +432,13 @@ void PageView::enforcePageBreaks()
     if (m_enforcingBreaks) {
         return;
     }
+    
+    // Skip during document loading/initialization
+    if (m_loading) {
+        qDebug() << "[PageView::enforcePageBreaks] Skipping - document is loading";
+        return;
+    }
+    
     m_enforcingBreaks = true;
     
     qDebug() << "[PageView] === enforcePageBreaks START ===";
@@ -538,11 +531,12 @@ void PageView::enforcePageBreaks()
         block = block.next();
     }
     
-    cursor.endEditBlock();
-    
     qDebug() << "[PageView] Total blocks:" << blockNum << "final Y:" << currentY;
     qDebug() << "[PageView] === enforcePageBreaks END ===";
-    
+
+    cursor.endEditBlock();
+
+    qDebug() << "[PageView] Undo: " << doc->isUndoAvailable();
     m_enforcingBreaks = false;
 }
 

@@ -5,6 +5,7 @@
 #include <QTextCharFormat>
 #include <QKeyEvent>
 #include <QScrollBar>
+#include <QDebug>
 
 ScriptEditor::ScriptEditor(QWidget *parent)
     : QTextEdit(parent)
@@ -20,17 +21,48 @@ ScriptEditor::ScriptEditor(QWidget *parent)
     // Minimal margins - page view handles the actual page margins
     setViewportMargins(0, 0, 0, 0);
 
+    // Enable undo/redo
+    qDebug() << "[ScriptEditor] Constructor: Enabling undo/redo";
+    document()->setUndoRedoEnabled(true);
+    setUndoRedoEnabled(true);
+    qDebug() << "[ScriptEditor] Constructor: undo enabled, isUndoAvailable:" << document()->isUndoAvailable();
+
     // Start with Action element
     applyFormat(Action);
+    qDebug() << "[ScriptEditor] Constructor: After applyFormat, isUndoAvailable:" << document()->isUndoAvailable();
 
     // Emit element changes when cursor moves
     connect(this, &QTextEdit::cursorPositionChanged, this, [this]{
         emit elementChanged(currentElement());
     });
+    
+    // Log when text changes to track undo availability
+    connect(document(), &QTextDocument::contentsChanged, this, [this]{
+        qDebug() << "[ScriptEditor] contentsChanged, isUndoAvailable:" << document()->isUndoAvailable() << "isRedoAvailable:" << document()->isRedoAvailable();
+    });
+    connect(this, &QTextEdit::undoAvailable, [](bool avail){
+        qDebug() << "Undo available:" << avail;
+    });
 }
 
 void ScriptEditor::keyPressEvent(QKeyEvent *e)
 {
+    qDebug() << "[ScriptEditor] keyPressEvent: key=" << e->key() << "text=" << e->text() << "modifiers=" << e->modifiers();
+
+    // Handle Ctrl+Z for undo
+    if (e->matches(QKeySequence::Undo)) {
+        qDebug() << "[ScriptEditor] Undo keystroke intercepted";
+        undo();
+        return;
+    }
+    // Handle Ctrl+Y or Ctrl+Shift+Z for redo
+    if (e->matches(QKeySequence::Redo)) {
+        qDebug() << "[ScriptEditor] Redo keystroke intercepted";
+        redo();
+        return;
+    }
+
+    // Tab: cycle through element types
     if (e->key() == Qt::Key_Tab && !e->modifiers()) {
         QTextCursor c = textCursor();
         QTextBlock block = c.block();
@@ -38,7 +70,21 @@ void ScriptEditor::keyPressEvent(QKeyEvent *e)
         ElementType current = (state >= 0 && state < ElementCount) ? static_cast<ElementType>(state) : Action;
         ElementType next = nextType(current);
         applyFormat(next);
-        return; // swallow tab
+        e->accept();
+        return;
+    }
+
+    // Auto-capitalize scene headings, character names, shots, and transitions as you type
+    if (!e->text().isEmpty() && e->text()[0].isLetter()) {
+        ElementType current = currentElement();
+        if (current == CharacterName || current == SceneHeading || 
+            current == Shot || current == Transition) {
+            // Insert uppercase version - this will be part of the undo stack
+            QKeyEvent upperEvent(e->type(), e->key(), e->modifiers(), e->text().toUpper());
+            QTextEdit::keyPressEvent(&upperEvent);
+            e->accept();
+            return;
+        }
     }
     if ((e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) && !e->modifiers()) {
         // Determine sensible default for the next line based on current element
@@ -138,7 +184,6 @@ void ScriptEditor::applyFormat(ElementType type)
     bf.setTopMargin(spaceBeforePx);
     bf.setAlignment(align);
 
-    // Apply formats to current block
     c.beginEditBlock();
     c.setBlockFormat(bf);
     cf.setFontCapitalization(caps);
@@ -162,9 +207,15 @@ ScriptEditor::ElementType ScriptEditor::currentElement() const
 
 void ScriptEditor::formatDocument()
 {
+    qDebug() << "[ScriptEditor::formatDocument] START";
     QTextDocument *doc = document();
     QTextBlock block = doc->begin();
     QTextCursor cursor(doc);
+    
+    // Disable undo to prevent format changes from polluting undo stack
+    bool undoWasEnabled = doc->isUndoRedoEnabled();
+    qDebug() << "[ScriptEditor::formatDocument] Before disable: undoEnabled=" << undoWasEnabled << "isUndoAvailable=" << doc->isUndoAvailable();
+    doc->setUndoRedoEnabled(false);
     
     cursor.beginEditBlock();
     while (block.isValid()) {
@@ -226,4 +277,25 @@ void ScriptEditor::formatDocument()
         block = block.next();
     }
     cursor.endEditBlock();
+    
+    // Re-enable undo and force signal update
+    doc->setUndoRedoEnabled(undoWasEnabled);
+    qDebug() << "[ScriptEditor::formatDocument] After re-enable: undoEnabled=" << undoWasEnabled << "isUndoAvailable=" << doc->isUndoAvailable();
+    qDebug() << "[ScriptEditor::formatDocument] Emitting undoAvailable(" << doc->isUndoAvailable() << ")";
+    qDebug() << "[ScriptEditor::formatDocument] Emitting redoAvailable(" << doc->isRedoAvailable() << ")";
+    emit doc->undoAvailable(doc->isUndoAvailable());
+    emit doc->redoAvailable(doc->isRedoAvailable());
+    qDebug() << "[ScriptEditor::formatDocument] END";
+}
+
+void ScriptEditor::undo()
+{
+    qDebug() << "[ScriptEditor] Undo called, undoAvailable:" << document()->isUndoAvailable();
+    QTextEdit::undo();
+}
+
+void ScriptEditor::redo()
+{
+    qDebug() << "[ScriptEditor] Redo called, redoAvailable:" << document()->isRedoAvailable();
+    QTextEdit::redo();
 }

@@ -23,6 +23,10 @@ public:
     void applyFormat(ElementType type);
     void formatDocument(); // Apply formatting to all blocks based on their userState
 
+public slots:
+    void undo();
+    void redo();
+
 protected:
     void keyPressEvent(QKeyEvent *e) override;
 

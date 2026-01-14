@@ -11,13 +11,43 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QHBoxLayout>
+#include <QDateTime>
 #include "pageview.h"
 #include "scripteditor.h"
 #include "startscreen.h"
 #include "elementtypepanel.h"
 
+// Custom message handler to add timestamps
+void customMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
+{
+    QString timestamp = QDateTime::currentDateTime().toString("hh:mm:ss.zzz");
+    QString formattedMsg = QString("[%1] %2").arg(timestamp, msg);
+    
+    // Call the default handler with the formatted message
+    QByteArray localMsg = formattedMsg.toLocal8Bit();
+    switch (type) {
+    case QtDebugMsg:
+        fprintf(stderr, "%s\n", localMsg.constData());
+        break;
+    case QtInfoMsg:
+        fprintf(stderr, "%s\n", localMsg.constData());
+        break;
+    case QtWarningMsg:
+        fprintf(stderr, "Warning: %s\n", localMsg.constData());
+        break;
+    case QtCriticalMsg:
+        fprintf(stderr, "Critical: %s\n", localMsg.constData());
+        break;
+    case QtFatalMsg:
+        fprintf(stderr, "Fatal: %s\n", localMsg.constData());
+        abort();
+    }
+}
+
 int main(int argc, char *argv[])
 {
+    // Install custom message handler to add timestamps
+    qInstallMessageHandler(customMessageHandler);
     QApplication app(argc, argv);
     qDebug() << "[Main] Application started";
     
@@ -53,6 +83,17 @@ int main(int argc, char *argv[])
     QAction *exportPdfAction = fileMenu->addAction("Export to &PDF...");
     exportPdfAction->setEnabled(false);
     
+    // Edit menu with undo/redo
+    QMenu *editMenu = menuBar->addMenu("&Edit");
+    
+    QAction *undoAction = editMenu->addAction("&Undo");
+    undoAction->setShortcut(QKeySequence::Undo);
+    undoAction->setEnabled(false);
+    
+    QAction *redoAction = editMenu->addAction("&Redo");
+    redoAction->setShortcut(QKeySequence::Redo);
+    redoAction->setEnabled(false);
+    
     // Create start screen
     StartScreen *startScreen = new StartScreen();
     stack->addWidget(startScreen);
@@ -60,7 +101,7 @@ int main(int argc, char *argv[])
     // Function to create page view with scroll area
     QString currentFilePath;
     
-    auto createPageView = [&window, stack, &currentPage, &currentFilePath, saveAction, saveAsAction, exportPdfAction]() -> PageView* {
+    auto createPageView = [&window, stack, &currentPage, &currentFilePath, saveAction, saveAsAction, exportPdfAction, undoAction, redoAction]() -> PageView* {
         PageView *page = new PageView();
         currentPage = page;
         currentFilePath.clear();
@@ -91,11 +132,34 @@ int main(int argc, char *argv[])
         // Connect type panel clicks to editor
         QObject::connect(typePanel, &ElementTypePanel::typeSelected, page->editor(), &ScriptEditor::applyFormat);
         
+        // Connect undo/redo actions
+        qDebug() << "[Main] Connecting undo/redo actions";
+        QObject::connect(undoAction, &QAction::triggered, page->editor(), &ScriptEditor::undo);
+        QObject::connect(redoAction, &QAction::triggered, page->editor(), &ScriptEditor::redo);
+        
+        // Update undo/redo state when document changes
+        QObject::connect(page->editor()->document(), &QTextDocument::undoAvailable, undoAction, &QAction::setEnabled);
+        QObject::connect(page->editor()->document(), &QTextDocument::redoAvailable, redoAction, &QAction::setEnabled);
+        
+        // Log undo/redo state changes
+        QObject::connect(page->editor()->document(), &QTextDocument::undoAvailable, [undoAction](bool available) {
+            qDebug() << "[Main] undoAvailable signal received:" << available << "-> setting action enabled to:" << available;
+            qDebug() << "[Main] undoAction->isEnabled() after signal:" << undoAction->isEnabled();
+        });
+        QObject::connect(page->editor()->document(), &QTextDocument::redoAvailable, [redoAction](bool available) {
+            qDebug() << "[Main] redoAvailable signal received:" << available << "-> setting action enabled to:" << available;
+            qDebug() << "[Main] redoAction->isEnabled() after signal:" << redoAction->isEnabled();
+        });
+        
         stack->setCurrentWidget(editorContainer);
         page->editor()->setFocus();
         saveAction->setEnabled(true);
         saveAsAction->setEnabled(true);
         exportPdfAction->setEnabled(true);
+        qDebug() << "[Main] Before setting initial undo/redo state: isUndoAvailable=" << page->editor()->document()->isUndoAvailable() << "isRedoAvailable=" << page->editor()->document()->isRedoAvailable();
+        undoAction->setEnabled(page->editor()->document()->isUndoAvailable());
+        redoAction->setEnabled(page->editor()->document()->isRedoAvailable());
+        qDebug() << "[Main] After setting initial undo/redo state: undoAction enabled=" << undoAction->isEnabled() << "redoAction enabled=" << redoAction->isEnabled();
         qDebug() << "[Main] Switched to editor view";
         
         return page;
@@ -105,7 +169,7 @@ int main(int argc, char *argv[])
     QObject::connect(startScreen, &StartScreen::newDocument, [&]() {
         qDebug() << "[Main] New document requested";
         PageView *page = createPageView();
-        page->loadSampleText(); // Start with sample text for now
+        // Start with blank document
     });
     
     QObject::connect(startScreen, &StartScreen::loadDocument, [&](const QString &filePath) {

@@ -13,7 +13,6 @@ public:
     bool saveToFile(const QString &filePath);
     bool loadFromFile(const QString &filePath);
     bool exportToPdf(const QString &filePath);
-    void loadSampleText(); // Extracted sample text loading
 
 public slots:
     void scrollToCursor();
@@ -38,5 +37,6 @@ private:
     int m_pageCount = 1;    // Number of pages based on content
     static constexpr int m_pageGap = 30; // Vertical gap between pages
     bool m_enforcingBreaks = false; // Guard against recursive calls
+    bool m_loading = false; // True during document load/initialization
     ScriptEditor* m_editor; // Editor placed inside printable area
 };
