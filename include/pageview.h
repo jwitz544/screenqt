@@ -9,6 +9,11 @@ class PageView : public QWidget {
 public:
     explicit PageView(QWidget *parent = nullptr);
     ScriptEditor* editor() const { return m_editor; }
+    int pageGapPx() const { return PAGE_GAP_PX; }
+    int pageCount() const { return m_pageCount; }
+    int printableHeight() const; // Height of printable area per page (px)
+    bool debugMode() const { return m_debugMode; }
+    void setDebugMode(bool enabled);
     
     bool saveToFile(const QString &filePath);
     bool loadFromFile(const QString &filePath);
@@ -32,11 +37,49 @@ private:
     void enforcePageBreaks(); // Insert spacing at page boundaries
     int printableHeightPerPage() const;
 
+    // Page dimensions in inches (US Letter)
+    static constexpr double PAGE_WIDTH_INCHES = 8.5;
+    static constexpr double PAGE_HEIGHT_INCHES = 11.0;
+    
+    // Page margins in inches
+    static constexpr double MARGIN_LEFT_INCHES = 1.5;
+    static constexpr double MARGIN_RIGHT_INCHES = 1.0;
+    static constexpr double MARGIN_TOP_INCHES = 1.0;
+    static constexpr double MARGIN_BOTTOM_INCHES = 1.0;
+    
+    // Display constants
+    static constexpr int PAGE_GAP_PX = 30;              // Vertical gap between pages
+    static constexpr int PAGE_HORIZONTAL_PADDING = 20;  // Minimum horizontal padding
+    static constexpr int WIDGET_HORIZONTAL_PADDING = 40;
+    static constexpr int WIDGET_VERTICAL_PADDING = 40;
+    static constexpr double DEFAULT_DPI = 96.0;         // Fallback DPI if screen unavailable
+    
+    // Background colors
+    static constexpr int BG_GRAY_VALUE = 230;           // Background gray (230, 230, 230)
+    static constexpr int BORDER_GRAY_VALUE = 200;       // Page border gray (200, 200, 200)
+    
+    // Page number display
+    static constexpr int PAGE_NUM_FONT_SIZE = 10;
+    static constexpr int PAGE_NUM_TOP_OFFSET = 10;
+    static constexpr int PAGE_NUM_RIGHT_MARGIN = 20;
+    
+    // PDF export settings
+    static constexpr int PDF_RESOLUTION_DPI = 300;
+    static constexpr int PDF_PAGE_NUM_FONT_SIZE = 12;
+    static constexpr int PDF_PAGE_NUM_WIDTH = 80;
+    static constexpr int PDF_PAGE_NUM_HEIGHT = 30;
+    static constexpr int PDF_PAGE_NUM_RIGHT_OFFSET = 100;
+    static constexpr int PDF_PAGE_NUM_TOP_OFFSET = 20;
+    
+    // Scroll behavior
+    static constexpr int SCROLL_X_MARGIN = 40;
+    static constexpr int SCROLL_Y_MARGIN = 120;
+
     QRect m_pageRect;       // Single page size (8.5x11")
     QRect m_printRect;      // Printable area inside one page
     int m_pageCount = 1;    // Number of pages based on content
-    static constexpr int m_pageGap = 30; // Vertical gap between pages
     bool m_enforcingBreaks = false; // Guard against recursive calls
     bool m_loading = false; // True during document load/initialization
     ScriptEditor* m_editor; // Editor placed inside printable area
+    bool m_debugMode = true; // Enable debug overlay by default
 };

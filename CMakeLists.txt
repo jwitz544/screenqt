@@ -58,3 +58,29 @@ if(WIN32)
         COMMENT "Running windeployqt..."
     )
 endif()
+
+# --- Tests ---
+enable_testing()
+find_package(Qt6 COMPONENTS Test REQUIRED)
+
+add_executable(pageview_tests
+    tests/pageview_enforcebreaks_test.cpp
+    src/pageview.cpp
+    include/pageview.h
+    src/scripteditor.cpp
+    include/scripteditor.h
+)
+
+target_include_directories(pageview_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_link_libraries(pageview_tests
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::PrintSupport
+    Qt6::Test
+)
+
+add_test(NAME pageview_enforcebreaks COMMAND pageview_tests)

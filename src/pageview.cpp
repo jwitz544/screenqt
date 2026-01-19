@@ -26,16 +26,16 @@ PageView::PageView(QWidget *parent)
 {
     qDebug() << "[PageView] Constructor starting";
     // Compute fixed letter page size in pixels
-    int pageW = static_cast<int>(inchToPxX(8.5));
-    int pageH = static_cast<int>(inchToPxY(11.0));
+    int pageW = static_cast<int>(inchToPxX(PAGE_WIDTH_INCHES));
+    int pageH = static_cast<int>(inchToPxY(PAGE_HEIGHT_INCHES));
     qDebug() << "[PageView] Page size:" << pageW << "x" << pageH;
     m_pageRect = QRect(0, 0, pageW, pageH);
 
     // Margins: Left 1.5", Right 1", Top 1", Bottom 1"
-    int left = static_cast<int>(inchToPxX(1.5));
-    int right = static_cast<int>(inchToPxX(1.0));
-    int top = static_cast<int>(inchToPxY(1.0));
-    int bottom = static_cast<int>(inchToPxY(1.0));
+    int left = static_cast<int>(inchToPxX(MARGIN_LEFT_INCHES));
+    int right = static_cast<int>(inchToPxX(MARGIN_RIGHT_INCHES));
+    int top = static_cast<int>(inchToPxY(MARGIN_TOP_INCHES));
+    int bottom = static_cast<int>(inchToPxY(MARGIN_BOTTOM_INCHES));
     m_printRect = QRect(left, top, pageW - left - right, pageH - top - bottom);
     qDebug() << "[PageView] Print rect:" << m_printRect;
 
@@ -66,16 +66,16 @@ void PageView::paintEvent(QPaintEvent *event)
     Q_UNUSED(event);
     QPainter p(this);
     // Gray background
-    p.fillRect(rect(), QColor(230, 230, 230));
+    p.fillRect(rect(), QColor(BG_GRAY_VALUE, BG_GRAY_VALUE, BG_GRAY_VALUE));
     
     // Draw stacked pages with gaps - these provide the white background for text
     int x = (width() - m_pageRect.width()) / 2;
-    if (x < 20) x = 20;
+    if (x < PAGE_HORIZONTAL_PADDING) x = PAGE_HORIZONTAL_PADDING;
     for (int i = 0; i < m_pageCount; ++i) {
         int yOff = pageYOffset(i);
         QRect pageRect(x, yOff, m_pageRect.width(), m_pageRect.height());
         p.fillRect(pageRect, Qt::white);
-        p.setPen(QPen(QColor(200, 200, 200)));
+        p.setPen(QPen(QColor(BORDER_GRAY_VALUE, BORDER_GRAY_VALUE, BORDER_GRAY_VALUE)));
         p.drawRect(pageRect.adjusted(0, 0, -1, -1));
         
         // Draw white rectangle for printable area to ensure text has white background
@@ -84,10 +84,10 @@ void PageView::paintEvent(QPaintEvent *event)
         
         // Draw page number in top right corner
         QString pageNumStr = QString::number(i + 1) + ".";
-        QFont pageNumFont("Courier New", 10);
+        QFont pageNumFont("Courier New", PAGE_NUM_FONT_SIZE);
         p.setFont(pageNumFont);
         p.setPen(Qt::black);
-        QRect pageNumRect = pageRect.adjusted(0, 10, -20, 0);
+        QRect pageNumRect = pageRect.adjusted(0, PAGE_NUM_TOP_OFFSET, -PAGE_NUM_RIGHT_MARGIN, 0);
         p.drawText(pageNumRect, Qt::AlignTop | Qt::AlignRight, pageNumStr);
     }
 }
@@ -104,12 +104,12 @@ void PageView::layoutPages()
     qDebug() << "[PageView] pageCount:" << m_pageCount;
     qDebug() << "[PageView] pageRect:" << m_pageRect;
     qDebug() << "[PageView] printRect (relative):" << m_printRect;
-    qDebug() << "[PageView] pageGap:" << m_pageGap;
+    qDebug() << "[PageView] pageGap:" << PAGE_GAP_PX;
     
     // Base page position centered horizontally, start near top
     int x = (width() - m_pageRect.width()) / 2;
-    if (x < 20) x = 20;
-    int startY = 20;
+    if (x < PAGE_HORIZONTAL_PADDING) x = PAGE_HORIZONTAL_PADDING;
+    int startY = PAGE_HORIZONTAL_PADDING;
     m_pageRect.moveTopLeft(QPoint(x, startY));
 
     // Printable width/height
@@ -123,7 +123,7 @@ void PageView::layoutPages()
 
     // Editor height spans all printable areas PLUS gaps between pages
     // Each page has printableH of content, with gap pixels between pages
-    int totalEditorHeight = printableH * m_pageCount + m_pageGap * (m_pageCount - 1);
+    int totalEditorHeight = printableH * m_pageCount + PAGE_GAP_PX * (m_pageCount - 1);
     qDebug() << "[PageView] totalEditorHeight:" << totalEditorHeight;
     
     m_editor->setGeometry(QRect(firstPrint.left(), firstPrint.top(), printableW, totalEditorHeight));
@@ -133,12 +133,12 @@ void PageView::layoutPages()
     m_editor->setLineWrapColumnOrWidth(printableW);
 
     // Set fixed size for this widget
-    int totalPageHeight = m_pageRect.height() * m_pageCount + m_pageGap * (m_pageCount - 1);
-    int fixedWidth = m_pageRect.width() + 40;
+    int totalPageHeight = m_pageRect.height() * m_pageCount + PAGE_GAP_PX * (m_pageCount - 1);
+    int fixedWidth = m_pageRect.width() + WIDGET_HORIZONTAL_PADDING;
     setMinimumWidth(fixedWidth);
     setMaximumWidth(QWIDGETSIZE_MAX);
-    setMinimumHeight(totalPageHeight + 40);
-    setMaximumHeight(totalPageHeight + 40);
+    setMinimumHeight(totalPageHeight + WIDGET_VERTICAL_PADDING);
+    setMaximumHeight(totalPageHeight + WIDGET_VERTICAL_PADDING);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     qDebug() << "[PageView] widget size:" << size();
     qDebug() << "[PageView] === layoutPages END ===";
@@ -164,7 +164,7 @@ void PageView::updatePagination()
         if (posInPage + blockHeight > printableH && posInPage > 0) {
             // move to next page
             pages++;
-            pageStartY += printableH + m_pageGap;
+            pageStartY += printableH + PAGE_GAP_PX;
             currentY = pageStartY + blockTopMargin + blockHeight;
         } else {
             currentY += blockTopMargin + blockHeight;
@@ -185,13 +185,13 @@ void PageView::updatePagination()
 double PageView::dpiX() const
 {
     QScreen *screen = QGuiApplication::primaryScreen();
-    return screen ? screen->logicalDotsPerInchX() : 96.0;
+    return screen ? screen->logicalDotsPerInchX() : DEFAULT_DPI;
 }
 
 double PageView::dpiY() const
 {
     QScreen *screen = QGuiApplication::primaryScreen();
-    return screen ? screen->logicalDotsPerInchY() : 96.0;
+    return screen ? screen->logicalDotsPerInchY() : DEFAULT_DPI;
 }
 
 double PageView::inchToPxX(double inches) const { return inches * dpiX(); }
@@ -200,7 +200,7 @@ double PageView::inchToPxY(double inches) const { return inches * dpiY(); }
 int PageView::pageYOffset(int pageIndex) const
 {
     // Y offset for page N: startY + (pageHeight + gap) * N
-    return 20 + (m_pageRect.height() + m_pageGap) * pageIndex;
+    return PAGE_HORIZONTAL_PADDING + (m_pageRect.height() + PAGE_GAP_PX) * pageIndex;
 }
 
 bool PageView::saveToFile(const QString &filePath)
@@ -306,10 +306,10 @@ bool PageView::exportToPdf(const QString &filePath)
     // Create PDF writer with letter page size (8.5" x 11")
     QPdfWriter writer(filePath);
     writer.setPageSize(QPageSize::Letter);
-    writer.setResolution(300); // High quality output
+    writer.setResolution(PDF_RESOLUTION_DPI); // High quality output
     
     // Set margins: left 1.5", others 1"
-    QMarginsF margins(1.5, 1.0, 1.0, 1.0); // in inches
+    QMarginsF margins(MARGIN_LEFT_INCHES, MARGIN_TOP_INCHES, MARGIN_RIGHT_INCHES, MARGIN_BOTTOM_INCHES); // in inches
     writer.setPageMargins(margins, QPageLayout::Inch);
     
     // Start painting
@@ -366,7 +366,7 @@ bool PageView::exportToPdf(const QString &filePath)
                 int contentStartY = currentY + blockTopMargin;
                 
                 // If this block's content starts on or after our target page area, use it
-                int expectedPageStart = (printableH + m_pageGap) * pageNum;
+                int expectedPageStart = (printableH + PAGE_GAP_PX) * pageNum;
                 if (contentStartY >= expectedPageStart) {
                     pageContentStart = contentStartY;
                     pageContentEnd = contentStartY + printableH;
@@ -401,14 +401,14 @@ bool PageView::exportToPdf(const QString &filePath)
         
         // Add page number in top right (after restoring from scaled context)
         painter.save();
-        QFont pageNumFont("Courier New", 12);
-        pageNumFont.setPointSizeF(12);
+        QFont pageNumFont("Courier New", PDF_PAGE_NUM_FONT_SIZE);
+        pageNumFont.setPointSizeF(PDF_PAGE_NUM_FONT_SIZE);
         painter.setFont(pageNumFont);
         painter.setPen(Qt::black);
         
         // Position in top right of paintable area
         QString pageNumStr = QString::number(pageNum + 1) + ".";
-        QRectF pageNumRect(paintRect.width() - 100, 20, 80, 30);
+        QRectF pageNumRect(paintRect.width() - PDF_PAGE_NUM_RIGHT_OFFSET, PDF_PAGE_NUM_TOP_OFFSET, PDF_PAGE_NUM_WIDTH, PDF_PAGE_NUM_HEIGHT);
         painter.drawText(pageNumRect, Qt::AlignRight | Qt::AlignTop, pageNumStr);
         painter.restore();
         
@@ -422,6 +422,11 @@ bool PageView::exportToPdf(const QString &filePath)
 }
 
 int PageView::printableHeightPerPage() const
+{
+    return m_printRect.height();
+}
+
+int PageView::printableHeight() const
 {
     return m_printRect.height();
 }
@@ -447,8 +452,8 @@ void PageView::enforcePageBreaks()
     const int printableH = printableHeightPerPage();
     const int topMargin = m_printRect.top();
     const int bottomMargin = m_pageRect.height() - (m_printRect.top() + m_printRect.height());
-    const int pageAdvance = printableH + topMargin + bottomMargin + m_pageGap;
-    qDebug() << "[PageView] printableHeightPerPage:" << printableH << "gap:" << m_pageGap;
+    const int pageAdvance = printableH + topMargin + bottomMargin + PAGE_GAP_PX;
+    qDebug() << "[PageView] printableHeightPerPage:" << printableH << "gap:" << PAGE_GAP_PX;
     
     // Track cumulative Y position as we iterate through blocks
     int currentY = 0;          // Absolute Y in document coords
@@ -498,7 +503,7 @@ void PageView::enforcePageBreaks()
                      << "spacingNeeded=" << spacingNeeded
                      << "topMargin=" << topMargin
                      << "bottomMargin=" << bottomMargin
-                     << "gap=" << m_pageGap;
+                     << "gap=" << PAGE_GAP_PX;
             
             cursor.setPosition(block.position());
             QTextBlockFormat fmt = block.blockFormat();
@@ -517,7 +522,7 @@ void PageView::enforcePageBreaks()
             // Only remove top margins that look like page breaks (>= gap size)
             QTextBlockFormat fmt = block.blockFormat();
             int existingMargin = static_cast<int>(fmt.topMargin());
-            if (existingMargin >= m_pageGap) {
+            if (existingMargin >= PAGE_GAP_PX) {
                 qDebug() << "[PageView]   -> Removing page break margin of" << existingMargin;
                 fmt.setTopMargin(0);
                 cursor.setPosition(block.position());
@@ -555,7 +560,7 @@ void PageView::scrollToCursor()
     QRect cr = m_editor->cursorRect();
     // Map to PageView coords
     QPoint center = m_editor->mapTo(this, cr.center());
-    int xMargin = 40;
-    int yMargin = 120; // give room above/below
+    int xMargin = SCROLL_X_MARGIN;
+    int yMargin = SCROLL_Y_MARGIN; // give room above/below
     sa->ensureVisible(center.x(), center.y(), xMargin, yMargin);
 }
