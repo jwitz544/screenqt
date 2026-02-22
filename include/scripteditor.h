@@ -22,8 +22,7 @@ public:
     
     void applyFormat(ElementType type);
     void formatDocument(); // Apply formatting to all blocks based on their userState
-    void setDebugMode(bool enabled);
-    bool debugMode() const { return m_debugMode; }
+
 
 public slots:
     void undo();
@@ -31,7 +30,6 @@ public slots:
 
 protected:
     void keyPressEvent(QKeyEvent *e) override;
-    void paintEvent(QPaintEvent *e) override;
 
 private:
     ElementType nextType(ElementType t) const;
@@ -41,7 +39,4 @@ private:
 
 signals:
     void elementChanged(ElementType type);
-
-private:
-    bool m_debugMode = true;
 };

@@ -215,11 +215,6 @@ void ScriptEditor::formatDocument()
     QTextBlock block = doc->begin();
     QTextCursor cursor(doc);
     
-    // Disable undo to prevent format changes from polluting undo stack
-    bool undoWasEnabled = doc->isUndoRedoEnabled();
-    qDebug() << "[ScriptEditor::formatDocument] Before disable: undoEnabled=" << undoWasEnabled << "isUndoAvailable=" << doc->isUndoAvailable();
-    doc->setUndoRedoEnabled(false);
-    
     cursor.beginEditBlock();
     while (block.isValid()) {
         int state = block.userState();
@@ -280,14 +275,6 @@ void ScriptEditor::formatDocument()
         block = block.next();
     }
     cursor.endEditBlock();
-    
-    // Re-enable undo and force signal update
-    doc->setUndoRedoEnabled(undoWasEnabled);
-    qDebug() << "[ScriptEditor::formatDocument] After re-enable: undoEnabled=" << undoWasEnabled << "isUndoAvailable=" << doc->isUndoAvailable();
-    qDebug() << "[ScriptEditor::formatDocument] Emitting undoAvailable(" << doc->isUndoAvailable() << ")";
-    qDebug() << "[ScriptEditor::formatDocument] Emitting redoAvailable(" << doc->isRedoAvailable() << ")";
-    emit doc->undoAvailable(doc->isUndoAvailable());
-    emit doc->redoAvailable(doc->isRedoAvailable());
     qDebug() << "[ScriptEditor::formatDocument] END";
 }
 
@@ -303,65 +290,4 @@ void ScriptEditor::redo()
     QTextEdit::redo();
 }
 
-void ScriptEditor::setDebugMode(bool enabled)
-{
-    if (m_debugMode == enabled) return;
-    m_debugMode = enabled;
-    if (viewport()) viewport()->update();
-    else update();
-}
 
-void ScriptEditor::paintEvent(QPaintEvent *e)
-{
-    // Draw the text content first
-    QTextEdit::paintEvent(e);
-
-    if (!m_debugMode) return;
-
-    // Overlay block outlines and heights
-    QPainter p(viewport());
-    p.setRenderHint(QPainter::Antialiasing, false);
-
-    QColor blockFill(255, 220, 40, 40);      // translucent yellow
-    QColor blockOutline(200, 160, 0, 220);   // darker yellow
-    QPen outlinePen(blockOutline);
-    outlinePen.setStyle(Qt::DashLine);
-    outlinePen.setWidth(1);
-    p.setPen(outlinePen);
-
-    QFont labelFont("Courier New", 8);
-    p.setFont(labelFont);
-    p.setBrush(blockFill);
-
-    QTextDocument *doc = document();
-    QTextBlock block = doc->begin();
-    while (block.isValid()) {
-        QTextLayout *layout = block.layout();
-        if (!layout) { block = block.next(); continue; }
-
-        const QPointF pos = layout->position();
-        const int blockHeight = static_cast<int>(std::ceil(doc->documentLayout()->blockBoundingRect(block).height()));
-        const int topMargin = static_cast<int>(block.blockFormat().topMargin());
-        const int leftMargin = static_cast<int>(block.blockFormat().leftMargin());
-        const int rightMargin = static_cast<int>(block.blockFormat().rightMargin());
-
-        const int x = leftMargin;
-        const int y = static_cast<int>(std::floor(pos.y())) + topMargin;
-        const int w = viewport()->width() - leftMargin - rightMargin;
-        const int h = blockHeight;
-
-        if (w > 0 && h > 0) {
-            QRect rect(x, y, w, h);
-            p.fillRect(rect, blockFill);
-            p.drawRect(rect.adjusted(0, 0, -1, -1));
-
-            // Height label near top-right of the block
-            p.setPen(blockOutline);
-            QString label = QString("h: %1px").arg(h);
-            QRect labelRect = rect.adjusted(0, 0, -4, 0);
-            p.drawText(labelRect, Qt::AlignRight | Qt::AlignTop, label);
-        }
-
-        block = block.next();
-    }
-}

@@ -1,9 +1,11 @@
 #include "elementtypepanel.h"
+#include "pageview.h"
 #include <QVBoxLayout>
 #include <QLabel>
+#include <QCheckBox>
 
 ElementTypePanel::ElementTypePanel(QWidget *parent)
-    : QWidget(parent), m_currentType(ScriptEditor::SceneHeading) {
+    : QWidget(parent), m_currentType(ScriptEditor::SceneHeading), m_pageView(nullptr) {
     
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->setContentsMargins(5, 5, 5, 5);
@@ -43,6 +45,11 @@ ElementTypePanel::ElementTypePanel(QWidget *parent)
     }
     
     layout->addStretch();
+    
+    // Debug checkbox
+    m_debugCheckbox = new QCheckBox("Debug Mode", this);
+    m_debugCheckbox->setChecked(true);
+    layout->addWidget(m_debugCheckbox);
     
     // Update highlight for initial type
     updateHighlight(ScriptEditor::SceneHeading);
@@ -87,3 +94,19 @@ void ElementTypePanel::updateHighlight(ScriptEditor::ElementType type) {
         }
     }
 }
+
+void ElementTypePanel::setPageView(PageView *pageView)
+{
+    m_pageView = pageView;
+    if (m_pageView) {
+        // Connect checkbox to PageView's debug mode
+        connect(m_debugCheckbox, &QCheckBox::stateChanged, this, [this](int state) {
+            if (m_pageView) {
+                m_pageView->setDebugMode(state == Qt::Checked);
+            }
+        });
+        // Set initial state
+        m_pageView->setDebugMode(m_debugCheckbox->isChecked());
+    }
+}
+

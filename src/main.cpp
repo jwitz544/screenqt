@@ -12,6 +12,7 @@
 #include <QMessageBox>
 #include <QHBoxLayout>
 #include <QDateTime>
+#include <QTimer>
 #include "pageview.h"
 #include "scripteditor.h"
 #include "startscreen.h"
@@ -50,6 +51,41 @@ int main(int argc, char *argv[])
     qInstallMessageHandler(customMessageHandler);
     QApplication app(argc, argv);
     qDebug() << "[Main] Application started";
+
+    // Headless pagination simulation mode (no UI interaction)
+    if (app.arguments().contains("--simulate-pagination")) {
+        qDebug() << "[Main] Running pagination simulation mode";
+        PageView *page = new PageView();
+        page->setDebugMode(true);
+        page->resize(900, 700);
+
+        QTextCursor cursor(page->editor()->document());
+        int batches = 0;
+        const int linesPerBatch = 120;
+        while (page->pageCount() < 3 && batches < 6) {
+            cursor.beginEditBlock();
+            for (int i = 0; i < linesPerBatch; ++i) {
+                cursor.insertText("f\n");
+            }
+            cursor.endEditBlock();
+
+            // Let layout and pagination catch up
+            for (int i = 0; i < 5; ++i) {
+                QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+            }
+
+            qDebug() << "[Main] Batch" << batches << "pageCount=" << page->pageCount()
+                     << "docHeight=" << page->editor()->document()->size().height();
+            page->logPaginationOffsets(QString("batch=%1 ").arg(batches));
+            batches++;
+        }
+
+        qDebug() << "[Main] Simulation complete. Final pageCount=" << page->pageCount();
+
+        // Allow any pending enforcePageBreaks logs, then exit
+        QTimer::singleShot(200, &app, &QCoreApplication::quit);
+        return app.exec();
+    }
     
     QMainWindow window;
     window.setWindowTitle("ScreenQt");
@@ -115,6 +151,7 @@ int main(int argc, char *argv[])
         
         // Create element type panel
         ElementTypePanel *typePanel = new ElementTypePanel();
+        typePanel->setPageView(page);
         
         // Create container widget for editor + panel
         QWidget *editorContainer = new QWidget();
