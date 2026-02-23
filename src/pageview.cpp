@@ -20,6 +20,11 @@
 #include <QPdfWriter>
 #include <QTimer>
 #include <cmath>
+namespace {
+int blockHeightPx(QTextDocument *doc, const QTextBlock &block) {
+    return static_cast<int>(std::ceil(doc->documentLayout()->blockBoundingRect(block).height()));
+}
+}
 
 PageView::PageView(QWidget *parent)
     : QWidget(parent), m_editor(new ScriptEditor(this))
@@ -57,7 +62,7 @@ PageView::PageView(QWidget *parent)
     connect(m_editor->document()->documentLayout(), &QAbstractTextDocumentLayout::documentSizeChanged,
             this, &PageView::updatePagination);
     connect(m_editor, &QTextEdit::textChanged, this, &PageView::enforcePageBreaks);
-        connect(m_editor, &QTextEdit::cursorPositionChanged, this, &PageView::scrollToCursor);
+    connect(m_editor, &QTextEdit::cursorPositionChanged, this, &PageView::scrollToCursor);
 
     layoutPages();
     qDebug() << "[PageView] Constructor complete, page count:" << m_pageCount;
@@ -93,99 +98,100 @@ void PageView::paintEvent(QPaintEvent *event)
         p.drawText(pageNumRect, Qt::AlignTop | Qt::AlignRight, pageNumStr);
     }
     
-    // ALWAYS draw page break reference lines (not just debug mode)
-    // This shows where blocks are calculated to page-break
     const int pageTopMarginPx = m_printRect.top();
     const int printableH = m_printRect.height();
-    int calcPageStartY = 0;
-    int calcNaturalY = pageTopMarginPx;
-    
     QTextDocument *doc = m_editor->document();
     const int editorLeft = m_editor->geometry().left();
     const int editorTop = m_editor->geometry().top();
-    
-    // Draw page 1 printable area start reference
-    int page1PaintableStart = pageYOffset(0) + pageTopMarginPx;
-    
-    p.setPen(QPen(Qt::yellow, 2, Qt::SolidLine));
-    p.drawLine(x + m_printRect.left(), page1PaintableStart, x + m_printRect.left() + m_printRect.width(), page1PaintableStart);
-    p.setFont(QFont("Courier New", 9, QFont::Bold));
-    p.setPen(Qt::yellow);
-    p.drawText(QRect(x + m_printRect.left() + 5, page1PaintableStart - 20, 300, 20), 
-              Qt::AlignLeft | Qt::AlignTop, "PAGE1_PRINTABLE_START");
-    
-    // Draw first block actual position
-    QTextBlock firstBlock = doc->begin();
-    if (firstBlock.isValid()) {
-        qreal firstBlockQtY = doc->documentLayout()->blockBoundingRect(firstBlock).top();
-        int firstBlockScreenY = static_cast<int>(firstBlockQtY) + editorTop;
-        p.setPen(QPen(Qt::magenta, 2, Qt::DashLine));
-        p.drawLine(x + m_printRect.left(), firstBlockScreenY, x + m_printRect.left() + m_printRect.width(), firstBlockScreenY);
-        p.setPen(Qt::magenta);
-        int offsetDiff1 = page1PaintableStart - firstBlockScreenY;
-        p.drawText(QRect(x + m_printRect.left() + 5, firstBlockScreenY - 20, 300, 20), 
-                  Qt::AlignLeft | Qt::AlignTop, QString("FIRST_BLOCK_ACTUAL | offset:%1px").arg(offsetDiff1));
-    }
-    
-    QTextBlock block = doc->begin();
-    int blockIdx = 0;
-    while (block.isValid()) {
-        QRectF blockRect = doc->documentLayout()->blockBoundingRect(block);
-        int blockHeight = static_cast<int>(std::ceil(blockRect.height()));
-        
-        int baseMargin = static_cast<int>(block.blockFormat().topMargin());
-        int existingPageBreakMargin = block.blockFormat().property(QTextFormat::UserProperty + 1).toInt();
-        int marginForCalc = baseMargin - existingPageBreakMargin;
-        
-        int calcPrintableStartY = calcPageStartY + pageTopMarginPx;
-        int calcPosInPage = (calcNaturalY - calcPrintableStartY) + marginForCalc;
-        
-        // Check if this block overflows
-        if (calcPosInPage + blockHeight > printableH && calcPosInPage > 0) {
-            // This block overflows - draw reference lines and info
-            int nextPageStartY = calcPageStartY + m_pageRect.height() + PAGE_GAP_PX;
-            int nextPagePrintableStart = nextPageStartY + pageTopMarginPx;
-            int pageBreakMargin = nextPagePrintableStart - (calcNaturalY + marginForCalc);
-            
-            int screenY = pageYOffset(0) + nextPagePrintableStart + editorTop - m_editor->geometry().top();
-            
-            // Draw cyan line showing calculated page 2 printable start
-            p.setPen(QPen(Qt::cyan, 3, Qt::SolidLine));
-            p.drawLine(x + m_printRect.left(), screenY, x + m_printRect.left() + m_printRect.width(), screenY);
-            
-            // Draw info box with detailed calculations
-            p.setFont(QFont("Courier New", 9, QFont::Bold));
-            p.setPen(Qt::cyan);
-            QString calcInfo = QString("CALC_PAGE2_START:%1 | nextPageStartY:%2 | calcMargin:%3 | pageHeight:%4 | gap:%5 | calcPageStart:%6")
-                .arg(nextPagePrintableStart).arg(nextPageStartY).arg(pageBreakMargin)
-                .arg(m_pageRect.height()).arg(PAGE_GAP_PX).arg(calcPageStartY);
-            p.drawText(QRect(x + m_printRect.left() + 5, screenY - 50, m_printRect.width() - 10, 50), 
-                      Qt::AlignLeft | Qt::AlignBottom, calcInfo);
-            
-            // Draw the actual block position for comparison
-            int actualBlockY = static_cast<int>(blockRect.top()) + editorTop;
+
+    if (m_debugMode) {
+        // Draw page break reference lines
+        int calcPageStartY = 0;
+        int calcNaturalY = pageTopMarginPx;
+
+        // Draw page 1 printable area start reference
+        int page1PaintableStart = pagePrintableStartY(0);
+
+        p.setPen(QPen(Qt::yellow, 2, Qt::SolidLine));
+        p.drawLine(x + m_printRect.left(), page1PaintableStart, x + m_printRect.left() + m_printRect.width(), page1PaintableStart);
+        p.setFont(QFont("Courier New", 9, QFont::Bold));
+        p.setPen(Qt::yellow);
+        p.drawText(QRect(x + m_printRect.left() + 5, page1PaintableStart - 20, 300, 20),
+                  Qt::AlignLeft | Qt::AlignTop, "PAGE1_PRINTABLE_START");
+
+        // Draw first block actual position
+        QTextBlock firstBlock = doc->begin();
+        if (firstBlock.isValid()) {
+            qreal firstBlockQtY = doc->documentLayout()->blockBoundingRect(firstBlock).top();
+            int firstBlockScreenY = static_cast<int>(firstBlockQtY) + editorTop;
             p.setPen(QPen(Qt::magenta, 2, Qt::DashLine));
-            p.drawLine(x + m_printRect.left(), actualBlockY, x + m_printRect.left() + m_printRect.width(), actualBlockY);
+            p.drawLine(x + m_printRect.left(), firstBlockScreenY, x + m_printRect.left() + m_printRect.width(), firstBlockScreenY);
             p.setPen(Qt::magenta);
-            p.setFont(QFont("Courier New", 8));
-            int offsetDiff = screenY - actualBlockY;
-            p.drawText(QRect(x + m_printRect.left() + 5, actualBlockY - 20, 300, 20), 
-                      Qt::AlignLeft | Qt::AlignTop, 
-                      QString("ACTUAL_BLOCK | offset_diff:%1px").arg(offsetDiff));
-            
+            int offsetDiff1 = page1PaintableStart - firstBlockScreenY;
+            p.drawText(QRect(x + m_printRect.left() + 5, firstBlockScreenY - 20, 300, 20),
+                      Qt::AlignLeft | Qt::AlignTop, QString("FIRST_BLOCK_ACTUAL | offset:%1px").arg(offsetDiff1));
+        }
+
+        QTextBlock block = doc->begin();
+        int blockIdx = 0;
+        while (block.isValid()) {
+            QRectF blockRect = doc->documentLayout()->blockBoundingRect(block);
+            int blockHeight = blockHeightPx(doc, block);
+
+            int baseMargin = static_cast<int>(block.blockFormat().topMargin());
+            int existingPageBreakMargin = block.blockFormat().property(QTextFormat::UserProperty + 1).toInt();
+            int marginForCalc = baseMargin - existingPageBreakMargin;
+
+            int calcPrintableStartY = calcPageStartY + pageTopMarginPx;
+            int calcPosInPage = (calcNaturalY - calcPrintableStartY) + marginForCalc;
+
+            // Check if this block overflows
+            if (calcPosInPage + blockHeight > printableH && calcPosInPage > 0) {
+                // This block overflows - draw reference lines and info
+                int nextPageStartY = calcPageStartY + m_pageRect.height() + PAGE_GAP_PX;
+                int nextPagePrintableStart = nextPageStartY + pageTopMarginPx;
+                int pageBreakMargin = nextPagePrintableStart - (calcNaturalY + marginForCalc);
+
+                int screenY = pageYOffset(0) + nextPagePrintableStart + editorTop - m_editor->geometry().top();
+
+                // Draw cyan line showing calculated page 2 printable start
+                p.setPen(QPen(Qt::cyan, 3, Qt::SolidLine));
+                p.drawLine(x + m_printRect.left(), screenY, x + m_printRect.left() + m_printRect.width(), screenY);
+
+                // Draw info box with detailed calculations
+                p.setFont(QFont("Courier New", 9, QFont::Bold));
+                p.setPen(Qt::cyan);
+                QString calcInfo = QString("CALC_PAGE2_START:%1 | nextPageStartY:%2 | calcMargin:%3 | pageHeight:%4 | gap:%5 | calcPageStart:%6")
+                    .arg(nextPagePrintableStart).arg(nextPageStartY).arg(pageBreakMargin)
+                    .arg(m_pageRect.height()).arg(PAGE_GAP_PX).arg(calcPageStartY);
+                p.drawText(QRect(x + m_printRect.left() + 5, screenY - 50, m_printRect.width() - 10, 50),
+                          Qt::AlignLeft | Qt::AlignBottom, calcInfo);
+
+                // Draw the actual block position for comparison
+                int actualBlockY = static_cast<int>(blockRect.top()) + editorTop;
+                p.setPen(QPen(Qt::magenta, 2, Qt::DashLine));
+                p.drawLine(x + m_printRect.left(), actualBlockY, x + m_printRect.left() + m_printRect.width(), actualBlockY);
+                p.setPen(Qt::magenta);
+                p.setFont(QFont("Courier New", 8));
+                int offsetDiff = screenY - actualBlockY;
+                p.drawText(QRect(x + m_printRect.left() + 5, actualBlockY - 20, 300, 20),
+                          Qt::AlignLeft | Qt::AlignTop,
+                          QString("ACTUAL_BLOCK | offset_diff:%1px").arg(offsetDiff));
+
+                blockIdx++;
+                break;  // Just show the first page break for clarity
+            }
+
+            if (calcPosInPage + blockHeight > printableH && calcPosInPage > 0) {
+                calcPageStartY += m_pageRect.height() + PAGE_GAP_PX;
+                calcNaturalY = calcPageStartY + pageTopMarginPx + blockHeight;
+            } else {
+                calcNaturalY += marginForCalc + blockHeight;
+            }
+
             blockIdx++;
-            break;  // Just show the first page break for clarity
+            block = block.next();
         }
-        
-        if (calcPosInPage + blockHeight > printableH && calcPosInPage > 0) {
-            calcPageStartY += m_pageRect.height() + PAGE_GAP_PX;
-            calcNaturalY = calcPageStartY + pageTopMarginPx + blockHeight;
-        } else {
-            calcNaturalY += marginForCalc + blockHeight;
-        }
-        
-        blockIdx++;
-        block = block.next();
     }
     
     // Debug mode: Draw colored boxes for each text block showing their heights
@@ -218,7 +224,7 @@ void PageView::paintEvent(QPaintEvent *event)
         while (block.isValid()) {
             // Get block dimensions
             QRectF blockRect = doc->documentLayout()->blockBoundingRect(block);
-            int blockHeight = static_cast<int>(std::ceil(blockRect.height()));
+            int blockHeight = blockHeightPx(doc, block);
             int blockY = static_cast<int>(blockRect.top()) + editorTop;
             int blockX = editorLeft;
             int blockWidth = m_printRect.width();
@@ -370,139 +376,6 @@ void PageView::setDebugMode(bool enabled)
     }
 }
 
-void PageView::logPaginationOffsets(const QString &tag)
-{
-    QTextDocument *doc = m_editor->document();
-    if (!doc) {
-        qDebug() << "[Sim] No document";
-        return;
-    }
-
-    const int pageTopMarginPx = m_printRect.top();
-    const int printableH = m_printRect.height();
-    const int editorTop = m_editor->geometry().top();
-    const int pageHeight = m_pageRect.height();
-
-    const int maxPagesToLog = 4;
-    QVector<int> expectedStarts;
-    expectedStarts.reserve(maxPagesToLog);
-    for (int i = 0; i < maxPagesToLog; ++i) {
-        expectedStarts.push_back(pageYOffset(i) + pageTopMarginPx);
-    }
-    QVector<int> firstBlockAtPage(maxPagesToLog, std::numeric_limits<int>::min());
-    QVector<int> firstBlockPos(maxPagesToLog, -1);
-
-    const int page1PaintableStart = pageYOffset(0) + pageTopMarginPx;
-    QTextBlock firstBlock = doc->begin();
-    if (firstBlock.isValid()) {
-        qreal firstBlockQtY = doc->documentLayout()->blockBoundingRect(firstBlock).top();
-        int firstBlockScreenY = static_cast<int>(firstBlockQtY) + editorTop;
-        int offsetDiff1 = page1PaintableStart - firstBlockScreenY;
-        if (tag.isEmpty()) {
-            qDebug() << "[Sim] FIRST_BLOCK_ACTUAL offset:" << offsetDiff1;
-        } else {
-            qDebug() << "[Sim]" << tag << "FIRST_BLOCK_ACTUAL offset:" << offsetDiff1;
-        }
-    } else {
-        qDebug() << "[Sim] No first block";
-    }
-
-    for (QTextBlock scan = doc->begin(); scan.isValid(); scan = scan.next()) {
-        int actualBlockY = static_cast<int>(doc->documentLayout()->blockBoundingRect(scan).top()) + editorTop;
-        for (int i = 0; i < maxPagesToLog; ++i) {
-            if (firstBlockAtPage[i] == std::numeric_limits<int>::min() && actualBlockY >= expectedStarts[i]) {
-                firstBlockAtPage[i] = actualBlockY;
-                firstBlockPos[i] = scan.position();
-            }
-        }
-    }
-
-    for (int i = 0; i < maxPagesToLog; ++i) {
-        if (firstBlockAtPage[i] != std::numeric_limits<int>::min()) {
-            int offset = expectedStarts[i] - firstBlockAtPage[i];
-            if (tag.isEmpty()) {
-                qDebug() << "[Sim] PAGE" << (i + 1) << "FIRST_BLOCK offset:" << offset;
-            } else {
-                qDebug() << "[Sim]" << tag << "PAGE" << (i + 1) << "FIRST_BLOCK offset:" << offset;
-            }
-
-            if (firstBlockPos[i] >= 0) {
-                QTextBlock b = doc->findBlock(firstBlockPos[i]);
-                QTextBlockFormat fmt = b.blockFormat();
-                int baseMargin = static_cast<int>(fmt.topMargin());
-                int pageBreakMargin = fmt.property(QTextFormat::UserProperty + 1).toInt();
-                if (tag.isEmpty()) {
-                    qDebug() << "[Sim] PAGE" << (i + 1) << "FIRST_BLOCK margins: top=" << baseMargin
-                             << "pageBreak=" << pageBreakMargin;
-                } else {
-                    qDebug() << "[Sim]" << tag << "PAGE" << (i + 1) << "FIRST_BLOCK margins: top=" << baseMargin
-                             << "pageBreak=" << pageBreakMargin;
-                }
-            }
-        }
-    }
-
-    int calcPageStartY = 0;
-    int calcNaturalY = pageTopMarginPx;
-    int blockIdx = 0;
-    int overflowCount = 0;
-    QTextBlock block = doc->begin();
-    while (block.isValid()) {
-        QRectF blockRect = doc->documentLayout()->blockBoundingRect(block);
-        int blockHeight = static_cast<int>(std::ceil(blockRect.height()));
-
-        int baseMargin = static_cast<int>(block.blockFormat().topMargin());
-        int existingPageBreakMargin = block.blockFormat().property(QTextFormat::UserProperty + 1).toInt();
-        int marginForCalc = baseMargin - existingPageBreakMargin;
-
-        int calcPrintableStartY = calcPageStartY + pageTopMarginPx;
-        int calcPosInPage = (calcNaturalY - calcPrintableStartY) + marginForCalc;
-
-        if (calcPosInPage + blockHeight > printableH && calcPosInPage > 0) {
-            int nextPageStartY = calcPageStartY + m_pageRect.height() + PAGE_GAP_PX;
-            int nextPagePrintableStart = nextPageStartY + pageTopMarginPx;
-            int screenY = pageYOffset(0) + nextPagePrintableStart + editorTop - m_editor->geometry().top();
-            int actualBlockY = static_cast<int>(blockRect.top()) + editorTop;
-            int offsetDiff = screenY - actualBlockY;
-
-            if (overflowCount < 4) {
-                int nextPageIndex = (calcPageStartY / (pageHeight + PAGE_GAP_PX)) + 2;
-                if (tag.isEmpty()) {
-                    qDebug() << "[Sim] OVERFLOW to page" << nextPageIndex << "offset_diff:" << offsetDiff
-                             << "blockIdx=" << blockIdx;
-                } else {
-                    qDebug() << "[Sim]" << tag << "OVERFLOW to page" << nextPageIndex << "offset_diff:" << offsetDiff
-                             << "blockIdx=" << blockIdx;
-                }
-            }
-            overflowCount++;
-
-            if (overflowCount == 1) {
-                if (tag.isEmpty()) {
-                    qDebug() << "[Sim] ACTUAL_BLOCK offset_diff:" << offsetDiff << "blockIdx=" << blockIdx;
-                } else {
-                    qDebug() << "[Sim]" << tag << "ACTUAL_BLOCK offset_diff:" << offsetDiff << "blockIdx=" << blockIdx;
-                }
-            }
-        }
-
-        if (calcPosInPage + blockHeight > printableH && calcPosInPage > 0) {
-            calcPageStartY += m_pageRect.height() + PAGE_GAP_PX;
-            calcNaturalY = calcPageStartY + pageTopMarginPx + blockHeight;
-        } else {
-            calcNaturalY += marginForCalc + blockHeight;
-        }
-
-        blockIdx++;
-        block = block.next();
-    }
-
-    if (tag.isEmpty()) {
-        qDebug() << "[Sim] No overflow block found";
-    } else {
-        qDebug() << "[Sim]" << tag << "No overflow block found";
-    }
-}
 
 void PageView::layoutPages()
 {
@@ -565,8 +438,7 @@ void PageView::updatePagination()
     QTextDocument *doc = m_editor->document();
     QTextBlock block = doc->begin();
     while (block.isValid()) {
-        qreal blockHeightF = doc->documentLayout()->blockBoundingRect(block).height();
-        int blockHeight = static_cast<int>(std::ceil(blockHeightF));
+        int blockHeight = blockHeightPx(doc, block);
         int blockTopMargin = static_cast<int>(block.blockFormat().topMargin());
 
         // Position within current page's printable area
@@ -613,6 +485,11 @@ int PageView::pageYOffset(int pageIndex) const
 {
     // Y offset for page N: startY + (pageHeight + gap) * N
     return PAGE_HORIZONTAL_PADDING + (m_pageRect.height() + PAGE_GAP_PX) * pageIndex;
+}
+
+int PageView::pagePrintableStartY(int pageIndex) const
+{
+    return pageYOffset(pageIndex) + m_printRect.top();
 }
 
 bool PageView::saveToFile(const QString &filePath)
@@ -866,7 +743,7 @@ void PageView::enforcePageBreaks()
     QTextDocument *doc = m_editor->document();
     const int printableH = printableHeightPerPage();
     const int pageTopMarginPx = m_printRect.top();
-    const int pageBottomMarginPx = m_pageRect.height() - m_printRect.bottom();
+    const int pageBottomMarginPx = m_pageRect.height() - (m_printRect.top() + m_printRect.height());
     
     // Calculate which blocks need page break margins and what those margins should be
     // Key: block position, Value: required top margin for page break
@@ -884,7 +761,7 @@ void PageView::enforcePageBreaks()
     int blockIdx = 0;
     for (QTextBlock block = doc->begin(); block.isValid(); block = block.next()) {
         QTextBlockFormat fmt = block.blockFormat();
-        int blockHeight = static_cast<int>(std::ceil(doc->documentLayout()->blockBoundingRect(block).height()));
+        int blockHeight = blockHeightPx(doc, block);
         
         // Get the block's base margin (element type margin, not pagination margin)
         int baseMargin = static_cast<int>(fmt.topMargin());

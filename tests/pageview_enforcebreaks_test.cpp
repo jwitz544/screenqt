@@ -21,6 +21,20 @@ private:
         }
     }
 
+    int firstBlockOffsetAtPage(PageView& pv, int pageIndex) {
+        QTextDocument* doc = pv.editor()->document();
+        const int expectedStart = pv.pagePrintableStartY(pageIndex);
+        const int editorTop = pv.editor()->geometry().top();
+
+        for (QTextBlock b = doc->begin(); b.isValid(); b = b.next()) {
+            int actualY = static_cast<int>(doc->documentLayout()->blockBoundingRect(b).top()) + editorTop;
+            if (actualY >= expectedStart) {
+                return expectedStart - actualY;
+            }
+        }
+        return expectedStart;
+    }
+
     int contentStartYAt(QTextDocument* doc, int idx) {
         int y = 0;
         int blockIndex = 0;
@@ -98,6 +112,25 @@ private slots:
         for (QTextBlock block = doc->begin(); block.isValid(); block = block.next()) {
             int topMargin = static_cast<int>(block.blockFormat().topMargin());
             QVERIFY2(topMargin < pv.pageGapPx(), "Residual page-break margin after content reduction");
+        }
+    }
+
+    void paginationOffsetsAreZero() {
+        PageView pv;
+        pv.editor()->clear();
+
+        insertLines(pv.editor(), 400);
+        QCoreApplication::processEvents();
+
+        QVERIFY2(pv.pageCount() >= 4, "Expected at least 4 pages for offset checks");
+
+        for (int pageIndex = 0; pageIndex < 4; ++pageIndex) {
+            int offset = firstBlockOffsetAtPage(pv, pageIndex);
+            QVERIFY2(offset == 0,
+                     QString("Page %1 first block offset expected 0, got %2")
+                     .arg(pageIndex + 1)
+                     .arg(offset)
+                     .toUtf8().constData());
         }
     }
 
@@ -294,12 +327,16 @@ private slots:
         int actualPage2BlockStart = -1;
         
         int blockIdx = 0;
+        int firstBlockBaseMargin = 0;
         for (QTextBlock block = doc->begin(); block.isValid(); block = block.next()) {
             int contentStartY = contentStartYAt(doc, blockIdx);
             
             if (contentStartY >= expectedPage2Start) {
                 firstBlockOnPage2Index = blockIdx;
                 actualPage2BlockStart = contentStartY;
+                int topMargin = static_cast<int>(block.blockFormat().topMargin());
+                int pageBreakMargin = block.blockFormat().property(QTextFormat::UserProperty + 1).toInt();
+                firstBlockBaseMargin = topMargin - pageBreakMargin;
                 break;
             }
             blockIdx++;
@@ -307,13 +344,14 @@ private slots:
         
         QVERIFY2(firstBlockOnPage2Index >= 0, "Should have found a block on page 2");
         
-        QString msg = QString("First block on page 2 (index %1) should start at Y=%2 (printableH + bottomMargin + gap + topMargin), actual Y=%3")
+        int expectedPage2BlockStart = expectedPage2Start + firstBlockBaseMargin;
+        QString msg = QString("First block on page 2 (index %1) should start at Y=%2 (printable start + base margin), actual Y=%3")
             .arg(firstBlockOnPage2Index)
-            .arg(expectedPage2Start)
+            .arg(expectedPage2BlockStart)
             .arg(actualPage2BlockStart);
         
-        // The first block on page 2 should start exactly at the beginning of page 2's printable area
-        QVERIFY2(actualPage2BlockStart == expectedPage2Start, qPrintable(msg));
+        // The first block on page 2 should start at printable start plus its top margin
+        QVERIFY2(actualPage2BlockStart == expectedPage2BlockStart, qPrintable(msg));
     }
     
     void pageBreakMarginIsCorrect() {

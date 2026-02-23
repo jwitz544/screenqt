@@ -1,8 +1,14 @@
 {
   "cmake.generator": "Visual Studio 17 2022",
+  "cmake.generatorToolset": "v143,version=14.42.34433",
+  "cmake.buildDirectory": "${workspaceFolder}/build",
+  "cmake.testExplorer.enabled": true,
   "cmake.configureSettings": {
     "CMAKE_PREFIX_PATH": "C:/Qt/6.10.1/msvc2022_64",
-    "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+    "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+    "BUILD_TESTING": "ON",
+    "CMAKE_GENERATOR_TOOLSET": "v143,version=14.42.34433",
+    "CMAKE_VS_GLOBALS": "VCToolsVersion=14.42.34433"
   },
   "C_Cpp.errorSquiggles": "Enabled",
   "C_Cpp.default.includePath": [

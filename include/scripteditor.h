@@ -3,6 +3,7 @@
 #include <QFont>
 #include <QScreen>
 #include <QGuiApplication>
+#include <QUndoStack>
 
 class ScriptEditor : public QTextEdit {
     Q_OBJECT
@@ -18,6 +19,14 @@ public:
         ElementCount
     };
 
+    enum class UndoGroupType {
+        Word,
+        Punctuation,
+        Whitespace,
+        Bulk,
+        Other
+    };
+
     explicit ScriptEditor(QWidget *parent = nullptr);
     
     void applyFormat(ElementType type);
@@ -30,12 +39,22 @@ public slots:
 
 protected:
     void keyPressEvent(QKeyEvent *e) override;
+    void mousePressEvent(QMouseEvent *e) override;
+    void focusOutEvent(QFocusEvent *e) override;
 
 private:
     ElementType nextType(ElementType t) const;
     ElementType currentElement() const;
     double dpiX() const;
     double inchToPx(double inches) const;
+
+    UndoGroupType classifyChar(QChar ch) const;
+    bool isNavigationKey(QKeyEvent *e) const;
+    void applyFormatDirect(ElementType type);
+    void buildFormats(ElementType type, QTextBlockFormat &bf, QTextCharFormat &cf) const;
+
+    QUndoStack m_undoStack;
+    bool m_suppressUndo = false;
 
 signals:
     void elementChanged(ElementType type);

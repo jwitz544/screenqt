@@ -14,10 +14,10 @@ public:
     int printableHeight() const; // Height of printable area per page (px)
     int pageHeight() const { return m_pageRect.height(); } // Full page height including margins (px)
     int pageTopMarginPx() const { return m_printRect.top(); } // Top margin from page edge to printable area (px)
-    int pageBottomMarginPx() const { return m_pageRect.height() - m_printRect.bottom(); } // Bottom margin (px)
+    int pageBottomMarginPx() const { return m_pageRect.height() - (m_printRect.top() + m_printRect.height()); } // Bottom margin (px)
+    int pagePrintableStartY(int pageIndex) const; // Absolute Y of printable start for page N
     bool debugMode() const { return m_debugMode; }
     void setDebugMode(bool enabled);
-    void logPaginationOffsets(const QString &tag = QString());
     
     bool saveToFile(const QString &filePath);
     bool loadFromFile(const QString &filePath);

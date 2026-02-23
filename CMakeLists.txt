@@ -27,7 +27,9 @@ find_package(Qt6 COMPONENTS Core Gui Widgets PrintSupport REQUIRED)
 add_executable(screenqt
     src/main.cpp
     src/scripteditor.cpp
+    src/scripteditor_undo.cpp
     include/scripteditor.h
+    include/scripteditor_undo.h
     src/pageview.cpp
     include/pageview.h
     src/startscreen.cpp
@@ -60,6 +62,7 @@ if(WIN32)
 endif()
 
 # --- Tests ---
+include(CTest)
 enable_testing()
 find_package(Qt6 COMPONENTS Test REQUIRED)
 
@@ -68,7 +71,9 @@ add_executable(pageview_tests
     src/pageview.cpp
     include/pageview.h
     src/scripteditor.cpp
+    src/scripteditor_undo.cpp
     include/scripteditor.h
+    include/scripteditor_undo.h
 )
 
 target_include_directories(pageview_tests PRIVATE
@@ -83,4 +88,65 @@ target_link_libraries(pageview_tests
     Qt6::Test
 )
 
-add_test(NAME pageview_enforcebreaks COMMAND pageview_tests)
+add_test(NAME pageview_enforcebreaks COMMAND pageview_tests -o pageview_enforcebreaks.txt,txt)
+
+add_executable(scripteditor_undo_tests
+    tests/scripteditor_undo_test.cpp
+    src/scripteditor.cpp
+    src/scripteditor_undo.cpp
+    include/scripteditor.h
+    include/scripteditor_undo.h
+)
+
+target_include_directories(scripteditor_undo_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_link_libraries(scripteditor_undo_tests
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::PrintSupport
+    Qt6::Test
+)
+
+add_test(NAME scripteditor_undo COMMAND scripteditor_undo_tests -o scripteditor_undo.txt,txt)
+
+add_executable(scripteditor_format_tests
+    tests/scripteditor_format_test.cpp
+    src/scripteditor.cpp
+    src/scripteditor_undo.cpp
+    include/scripteditor.h
+    include/scripteditor_undo.h
+)
+
+target_include_directories(scripteditor_format_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_link_libraries(scripteditor_format_tests
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::PrintSupport
+    Qt6::Test
+)
+
+add_test(NAME scripteditor_format COMMAND scripteditor_format_tests -o scripteditor_format.txt,txt)
+
+if(WIN32)
+    add_custom_command(TARGET pageview_tests POST_BUILD
+        COMMAND "${CMAKE_PREFIX_PATH}/bin/windeployqt.exe" "$<TARGET_FILE:pageview_tests>"
+        COMMENT "Running windeployqt for tests..."
+    )
+
+    add_custom_command(TARGET scripteditor_undo_tests POST_BUILD
+        COMMAND "${CMAKE_PREFIX_PATH}/bin/windeployqt.exe" "$<TARGET_FILE:scripteditor_undo_tests>"
+        COMMENT "Running windeployqt for scripteditor_undo_tests..."
+    )
+
+    add_custom_command(TARGET scripteditor_format_tests POST_BUILD
+        COMMAND "${CMAKE_PREFIX_PATH}/bin/windeployqt.exe" "$<TARGET_FILE:scripteditor_format_tests>"
+        COMMENT "Running windeployqt for scripteditor_format_tests..."
+    )
+endif()
