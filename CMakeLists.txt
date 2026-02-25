@@ -32,10 +32,16 @@ add_executable(screenqt
     include/scripteditor_undo.h
     src/pageview.cpp
     include/pageview.h
+    src/screenplayio.cpp
+    include/screenplayio.h
+    src/pdfexporter.cpp
+    include/pdfexporter.h
     src/startscreen.cpp
     include/startscreen.h
     src/elementtypepanel.cpp
     include/elementtypepanel.h
+    src/outlinepanel.cpp
+    include/outlinepanel.h
 )
 
 target_include_directories(screenqt PRIVATE
@@ -70,6 +76,10 @@ add_executable(pageview_tests
     tests/pageview_enforcebreaks_test.cpp
     src/pageview.cpp
     include/pageview.h
+    src/screenplayio.cpp
+    include/screenplayio.h
+    src/pdfexporter.cpp
+    include/pdfexporter.h
     src/scripteditor.cpp
     src/scripteditor_undo.cpp
     include/scripteditor.h

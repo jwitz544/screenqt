@@ -12,10 +12,14 @@
 #include <QMessageBox>
 #include <QHBoxLayout>
 #include <QDateTime>
+#include <QDockWidget>
+#include <QList>
+#include <QSettings>
 #include "pageview.h"
 #include "scripteditor.h"
 #include "startscreen.h"
 #include "elementtypepanel.h"
+#include "outlinepanel.h"
 
 // Custom message handler to add timestamps
 void customMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
@@ -56,6 +60,10 @@ int main(int argc, char *argv[])
     window.resize(900, 700);
     qDebug() << "[Main] Window created and resized to 900x700";
 
+    QSettings settings("ScreenQt", "ScreenQt");
+    constexpr int layoutStateVersion = 1;
+    int persistedZoomSteps = settings.value("editor/zoomSteps", 0).toInt();
+
     // Create stacked widget to switch between start screen and editor
     QStackedWidget *stack = new QStackedWidget(&window);
     window.setCentralWidget(stack);
@@ -79,8 +87,13 @@ int main(int argc, char *argv[])
     openAction->setShortcut(QKeySequence::Open);
     
     fileMenu->addSeparator();
+
+    QMenu *importExportMenu = fileMenu->addMenu("&Import/Export");
+    QAction *importFdxAction = importExportMenu->addAction("&Import Final Draft (FDX)...");
+    QAction *exportFdxAction = importExportMenu->addAction("Export to &Final Draft (FDX)...");
+    exportFdxAction->setEnabled(false);
     
-    QAction *exportPdfAction = fileMenu->addAction("Export to &PDF...");
+    QAction *exportPdfAction = importExportMenu->addAction("Export to &PDF...");
     exportPdfAction->setEnabled(false);
     
     // Edit menu with undo/redo
@@ -93,19 +106,87 @@ int main(int argc, char *argv[])
     QAction *redoAction = editMenu->addAction("&Redo");
     redoAction->setShortcut(QKeySequence::Redo);
     redoAction->setEnabled(false);
+
+    QMenu *viewMenu = menuBar->addMenu("&View");
+    QAction *zoomInAction = viewMenu->addAction("Zoom &In");
+    zoomInAction->setShortcut(QKeySequence::ZoomIn);
+    zoomInAction->setEnabled(false);
+
+    QAction *zoomOutAction = viewMenu->addAction("Zoom &Out");
+    zoomOutAction->setShortcut(QKeySequence::ZoomOut);
+    zoomOutAction->setEnabled(false);
+
+    QAction *resetZoomAction = viewMenu->addAction("Reset &Zoom");
+    resetZoomAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
+    resetZoomAction->setEnabled(false);
+
+    QAction *resetLayoutAction = viewMenu->addAction("Reset &Layout");
     
     // Create start screen
     StartScreen *startScreen = new StartScreen();
     stack->addWidget(startScreen);
+
+    // Right-side draggable panel blocks
+    ElementTypePanel *typePanel = new ElementTypePanel();
+    OutlinePanel *outlinePanel = new OutlinePanel();
+
+    QDockWidget *elementDock = new QDockWidget("Elements", &window);
+    elementDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+    elementDock->setWidget(typePanel);
+
+    QDockWidget *outlineDock = new QDockWidget("Outline", &window);
+    outlineDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+    outlineDock->setWidget(outlinePanel);
+
+    window.addDockWidget(Qt::RightDockWidgetArea, elementDock);
+    window.addDockWidget(Qt::RightDockWidgetArea, outlineDock);
+    window.splitDockWidget(elementDock, outlineDock, Qt::Vertical);
+
+    elementDock->setMinimumWidth(150);
+    outlineDock->setMinimumWidth(150);
+
+    const QByteArray savedGeometry = settings.value("window/geometry").toByteArray();
+    if (!savedGeometry.isEmpty()) {
+        window.restoreGeometry(savedGeometry);
+    }
+
+    const QByteArray savedState = settings.value("window/state").toByteArray();
+    if (!savedState.isEmpty()) {
+        window.restoreState(savedState, layoutStateVersion);
+    }
+
+    elementDock->hide();
+    outlineDock->hide();
+
+    auto applyDefaultPanelLayout = [&window, elementDock, outlineDock]() {
+        if (elementDock->isFloating()) {
+            elementDock->setFloating(false);
+        }
+        if (outlineDock->isFloating()) {
+            outlineDock->setFloating(false);
+        }
+
+        window.addDockWidget(Qt::RightDockWidgetArea, elementDock);
+        window.addDockWidget(Qt::RightDockWidgetArea, outlineDock);
+        window.splitDockWidget(elementDock, outlineDock, Qt::Vertical);
+
+        QList<QDockWidget*> docks{elementDock, outlineDock};
+        QList<int> sizes{1, 1};
+        window.resizeDocks(docks, sizes, Qt::Vertical);
+
+        elementDock->show();
+        outlineDock->show();
+    };
     
     // Function to create page view with scroll area
     QString currentFilePath;
     
-    auto createPageView = [&window, stack, &currentPage, &currentFilePath, saveAction, saveAsAction, exportPdfAction, undoAction, redoAction]() -> PageView* {
+    auto createPageView = [&window, stack, &currentPage, &currentFilePath, &persistedZoomSteps, saveAction, saveAsAction, exportFdxAction, exportPdfAction, undoAction, redoAction, zoomInAction, zoomOutAction, resetZoomAction, typePanel, outlinePanel, elementDock, outlineDock]() -> PageView* {
         PageView *page = new PageView();
         currentPage = page;
         currentFilePath.clear();
         qDebug() << "[Main] PageView created";
+        page->setZoomSteps(persistedZoomSteps);
         
         QScrollArea *scroll = new QScrollArea();
         scroll->setWidget(page);
@@ -113,17 +194,15 @@ int main(int argc, char *argv[])
         scroll->setBackgroundRole(QPalette::Dark);
         scroll->setAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
         
-        // Create element type panel
-        ElementTypePanel *typePanel = new ElementTypePanel();
         typePanel->setPageView(page);
+        outlinePanel->setEditor(page->editor());
         
         // Create container widget for editor + panel
         QWidget *editorContainer = new QWidget();
         QHBoxLayout *containerLayout = new QHBoxLayout(editorContainer);
         containerLayout->setContentsMargins(0, 0, 0, 0);
-        containerLayout->setSpacing(10);
+        containerLayout->setSpacing(0);
         containerLayout->addWidget(scroll, 1);
-        containerLayout->addWidget(typePanel, 0, Qt::AlignRight | Qt::AlignTop);
         
         stack->addWidget(editorContainer);
         
@@ -156,7 +235,13 @@ int main(int argc, char *argv[])
         page->editor()->setFocus();
         saveAction->setEnabled(true);
         saveAsAction->setEnabled(true);
+        exportFdxAction->setEnabled(true);
         exportPdfAction->setEnabled(true);
+        zoomInAction->setEnabled(true);
+        zoomOutAction->setEnabled(true);
+        resetZoomAction->setEnabled(true);
+        elementDock->show();
+        outlineDock->show();
         qDebug() << "[Main] Before setting initial undo/redo state: isUndoAvailable=" << page->editor()->document()->isUndoAvailable() << "isRedoAvailable=" << page->editor()->document()->isRedoAvailable();
         undoAction->setEnabled(page->editor()->document()->isUndoAvailable());
         redoAction->setEnabled(page->editor()->document()->isRedoAvailable());
@@ -189,7 +274,7 @@ int main(int argc, char *argv[])
         
         if (currentFilePath.isEmpty()) {
             // No file path yet, do Save As
-            QString filePath = QFileDialog::getSaveFileName(&window, "Save Screenplay", "", "Screenplay Files (*.sqt)");
+            QString filePath = QFileDialog::getSaveFileName(&window, "Save Screenplay", "", "ScreenQt Files (*.sqt)");
             if (filePath.isEmpty()) return;
             currentFilePath = filePath;
         }
@@ -203,7 +288,7 @@ int main(int argc, char *argv[])
 
     // Connect open action (loads into a new page view)
     QObject::connect(openAction, &QAction::triggered, [&]() {
-        QString filePath = QFileDialog::getOpenFileName(&window, "Open Screenplay", "", "Screenplay Files (*.sqt)");
+        QString filePath = QFileDialog::getOpenFileName(&window, "Open Screenplay", "", "ScreenQt Files (*.sqt);;All Files (*)");
         if (filePath.isEmpty()) return;
         qDebug() << "[Main] Open document requested:" << filePath;
         PageView *page = createPageView();
@@ -213,11 +298,24 @@ int main(int argc, char *argv[])
             QMessageBox::warning(&window, "Load Error", "Failed to load screenplay file.");
         }
     });
+
+    QObject::connect(importFdxAction, &QAction::triggered, [&]() {
+        QString filePath = QFileDialog::getOpenFileName(&window, "Import Final Draft", "", "Final Draft Files (*.fdx);;All Files (*)");
+        if (filePath.isEmpty()) return;
+
+        qDebug() << "[Main] Import FDX requested:" << filePath;
+        PageView *page = createPageView();
+        if (page->loadFromFile(filePath)) {
+            currentFilePath.clear();
+        } else {
+            QMessageBox::warning(&window, "Import Error", "Failed to import Final Draft file.");
+        }
+    });
     
     QObject::connect(saveAsAction, &QAction::triggered, [&]() {
         if (!currentPage) return;
         
-        QString filePath = QFileDialog::getSaveFileName(&window, "Save Screenplay As", "", "Screenplay Files (*.sqt)");
+        QString filePath = QFileDialog::getSaveFileName(&window, "Save Screenplay As", "", "ScreenQt Files (*.sqt)");
         if (filePath.isEmpty()) return;
         
         if (currentPage->saveToFile(filePath)) {
@@ -225,6 +323,20 @@ int main(int argc, char *argv[])
             qDebug() << "[Main] Saved as:" << currentFilePath;
         } else {
             QMessageBox::warning(&window, "Save Error", "Failed to save screenplay file.");
+        }
+    });
+
+    QObject::connect(exportFdxAction, &QAction::triggered, [&]() {
+        if (!currentPage) return;
+
+        QString filePath = QFileDialog::getSaveFileName(&window, "Export Screenplay as Final Draft", "", "Final Draft Files (*.fdx)");
+        if (filePath.isEmpty()) return;
+
+        if (currentPage->saveToFile(filePath)) {
+            qDebug() << "[Main] Exported to FDX:" << filePath;
+            QMessageBox::information(&window, "Export Successful", "Screenplay exported to Final Draft successfully.");
+        } else {
+            QMessageBox::warning(&window, "Export Error", "Failed to export screenplay to Final Draft.");
         }
     });
     
@@ -240,6 +352,37 @@ int main(int argc, char *argv[])
         } else {
             QMessageBox::warning(&window, "Export Error", "Failed to export screenplay to PDF.");
         }
+    });
+
+    QObject::connect(zoomInAction, &QAction::triggered, [&]() {
+        if (!currentPage) return;
+        currentPage->zoomInView();
+        persistedZoomSteps = currentPage->zoomSteps();
+    });
+
+    QObject::connect(zoomOutAction, &QAction::triggered, [&]() {
+        if (!currentPage) return;
+        currentPage->zoomOutView();
+        persistedZoomSteps = currentPage->zoomSteps();
+    });
+
+    QObject::connect(resetZoomAction, &QAction::triggered, [&]() {
+        if (!currentPage) return;
+        currentPage->resetZoom();
+        persistedZoomSteps = currentPage->zoomSteps();
+    });
+
+    QObject::connect(resetLayoutAction, &QAction::triggered, [&]() {
+        applyDefaultPanelLayout();
+    });
+
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, [&]() {
+        if (currentPage) {
+            persistedZoomSteps = currentPage->zoomSteps();
+        }
+        settings.setValue("editor/zoomSteps", persistedZoomSteps);
+        settings.setValue("window/geometry", window.saveGeometry());
+        settings.setValue("window/state", window.saveState(layoutStateVersion));
     });
     
     stack->setCurrentWidget(startScreen);

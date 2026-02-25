@@ -39,8 +39,8 @@ ScriptEditor::ScriptEditor(QWidget *parent)
     document()->setUndoRedoEnabled(false);
     setUndoRedoEnabled(false);
 
-    // Start with Action element without pushing undo state
-    applyFormatDirect(Action);
+    // Start with Scene Heading element without pushing undo state
+    applyFormatDirect(SceneHeading);
     qDebug() << "[ScriptEditor] Constructor: After applyFormatDirect, isUndoAvailable:" << document()->isUndoAvailable();
 
     // Emit element changes when cursor moves
@@ -117,11 +117,22 @@ void ScriptEditor::keyPressEvent(QKeyEvent *e)
         return;
     }
 
+    if (e->key() == Qt::Key_Backtab || (e->key() == Qt::Key_Tab && e->modifiers() == Qt::ShiftModifier)) {
+        QTextCursor c = textCursor();
+        QTextBlock block = c.block();
+        int state = block.userState();
+        ElementType current = (state >= 0 && state < ElementCount) ? static_cast<ElementType>(state) : SceneHeading;
+        ElementType prev = previousType(current);
+        applyFormat(prev);
+        e->accept();
+        return;
+    }
+
     if (e->key() == Qt::Key_Tab && !e->modifiers()) {
         QTextCursor c = textCursor();
         QTextBlock block = c.block();
         int state = block.userState();
-        ElementType current = (state >= 0 && state < ElementCount) ? static_cast<ElementType>(state) : Action;
+        ElementType current = (state >= 0 && state < ElementCount) ? static_cast<ElementType>(state) : SceneHeading;
         ElementType next = nextType(current);
         applyFormat(next);
         e->accept();
@@ -255,6 +266,13 @@ ScriptEditor::ElementType ScriptEditor::nextType(ElementType t) const
     return static_cast<ElementType>(ni);
 }
 
+ScriptEditor::ElementType ScriptEditor::previousType(ElementType t) const
+{
+    int i = static_cast<int>(t);
+    int pi = (i - 1 + static_cast<int>(ElementCount)) % static_cast<int>(ElementCount);
+    return static_cast<ElementType>(pi);
+}
+
 void ScriptEditor::applyFormat(ElementType type)
 {
     if (m_suppressUndo) {
@@ -315,6 +333,34 @@ void ScriptEditor::redo()
 {
     qDebug() << "[ScriptEditor] Redo called, redoAvailable:" << m_undoStack.canRedo();
     m_undoStack.redo();
+}
+
+void ScriptEditor::zoomInText()
+{
+    if (m_zoomSteps >= 20) {
+        return;
+    }
+    zoomIn(1);
+    m_zoomSteps++;
+}
+
+void ScriptEditor::zoomOutText()
+{
+    if (m_zoomSteps <= -8) {
+        return;
+    }
+    zoomOut(1);
+    m_zoomSteps--;
+}
+
+void ScriptEditor::resetZoom()
+{
+    if (m_zoomSteps > 0) {
+        zoomOut(m_zoomSteps);
+    } else if (m_zoomSteps < 0) {
+        zoomIn(-m_zoomSteps);
+    }
+    m_zoomSteps = 0;
 }
 
 ScriptEditor::UndoGroupType ScriptEditor::classifyChar(QChar ch) const

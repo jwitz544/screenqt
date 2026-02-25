@@ -5,6 +5,8 @@
 #include <QTextDocument>
 #include <QTextBlock>
 #include <QAbstractTextDocumentLayout>
+#include <QFile>
+#include <QTemporaryDir>
 #include "pageview.h"
 #include "scripteditor.h"
 
@@ -404,6 +406,89 @@ private slots:
                  << "bottomMargin=" << bottomMargin << "pageGap=" << pageGap
                  << "expectedNextPageStart=" << expectedNextPagePrintableStart
                  << "pageBreakMargin=" << actualPageBreakMargin;
+    }
+
+    void loadsFdxIntoExpectedElementTypes() {
+        QTemporaryDir tempDir;
+        QVERIFY2(tempDir.isValid(), "Failed to create temporary directory");
+
+        const QString filePath = tempDir.path() + "/sample.fdx";
+        QFile file(filePath);
+        QVERIFY2(file.open(QIODevice::WriteOnly | QIODevice::Text), "Failed to create temp FDX file");
+
+        const QByteArray fdxData =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            "<!DOCTYPE FinalDraft SYSTEM \"Final Draft Document Type Definition\">\n"
+            "<FinalDraft DocumentType=\"Script\" Template=\"No\" Version=\"1\">\n"
+            "  <Content>\n"
+            "    <Paragraph Type=\"Scene Heading\"><Text>INT. OFFICE - DAY</Text></Paragraph>\n"
+            "    <Paragraph Type=\"Character\"><Text>ALICE</Text></Paragraph>\n"
+            "    <Paragraph Type=\"Dialogue\"><Text>Hello there.</Text></Paragraph>\n"
+            "  </Content>\n"
+            "</FinalDraft>\n";
+
+        file.write(fdxData);
+        file.close();
+
+        PageView pv;
+        QVERIFY2(pv.loadFromFile(filePath), "FDX load failed");
+        QCoreApplication::processEvents();
+
+        QTextDocument *doc = pv.editor()->document();
+        QTextBlock block = doc->begin();
+        QVERIFY(block.isValid());
+        QCOMPARE(block.text(), QString("INT. OFFICE - DAY"));
+        QCOMPARE(block.userState(), static_cast<int>(ScriptEditor::SceneHeading));
+
+        block = block.next();
+        QVERIFY(block.isValid());
+        QCOMPARE(block.text(), QString("ALICE"));
+        QCOMPARE(block.userState(), static_cast<int>(ScriptEditor::CharacterName));
+
+        block = block.next();
+        QVERIFY(block.isValid());
+        QCOMPARE(block.text(), QString("Hello there."));
+        QCOMPARE(block.userState(), static_cast<int>(ScriptEditor::Dialogue));
+    }
+
+    void savesFdxWithExpectedParagraphTypes() {
+        QTemporaryDir tempDir;
+        QVERIFY2(tempDir.isValid(), "Failed to create temporary directory");
+
+        PageView pv;
+        QTextCursor cursor(pv.editor()->document());
+        cursor.beginEditBlock();
+
+        cursor.insertText("INT. OFFICE - DAY");
+        cursor.block().setUserState(static_cast<int>(ScriptEditor::SceneHeading));
+        cursor.insertText("\n");
+        cursor.movePosition(QTextCursor::NextBlock);
+
+        cursor.insertText("ALICE");
+        cursor.block().setUserState(static_cast<int>(ScriptEditor::CharacterName));
+        cursor.insertText("\n");
+        cursor.movePosition(QTextCursor::NextBlock);
+
+        cursor.insertText("Hello there.");
+        cursor.block().setUserState(static_cast<int>(ScriptEditor::Dialogue));
+
+        cursor.endEditBlock();
+        pv.editor()->formatDocument();
+
+        const QString filePath = tempDir.path() + "/export.fdx";
+        QVERIFY2(pv.saveToFile(filePath), "FDX save failed");
+
+        QFile file(filePath);
+        QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), "Failed to read generated FDX file");
+        const QString content = QString::fromUtf8(file.readAll());
+        file.close();
+
+        QVERIFY(content.contains("<Paragraph Type=\"Scene Heading\">"));
+        QVERIFY(content.contains("<Paragraph Type=\"Character\">"));
+        QVERIFY(content.contains("<Paragraph Type=\"Dialogue\">"));
+        QVERIFY(content.contains("INT. OFFICE - DAY"));
+        QVERIFY(content.contains("ALICE"));
+        QVERIFY(content.contains("Hello there."));
     }
 };
 

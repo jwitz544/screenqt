@@ -26,7 +26,7 @@ private slots:
 
         QTest::keyClicks(&editor, "Test");
         QString originalText = editor.toPlainText();
-        QCOMPARE(originalText, QString("Test"));
+        QCOMPARE(originalText, QString("TEST"));
 
         // Change format via tab
         QTest::keyClick(&editor, Qt::Key_Tab);
@@ -39,15 +39,24 @@ private slots:
         ScriptEditor editor;
         focusEditor(&editor);
 
-        // Start with Action (mixed case)
+        // Start with Scene Heading (uppercase)
         QTest::keyClicks(&editor, "hello world");
-        QCOMPARE(editor.toPlainText(), QString("hello world"));
+        QCOMPARE(editor.toPlainText(), QString("HELLO WORLD"));
 
-        // Tab to CharacterName (all uppercase)
-        int initialState = editor.textCursor().block().userState();
-        QTest::keyClick(&editor, Qt::Key_Tab);
-        int afterState = editor.textCursor().block().userState();
-        QVERIFY(afterState != initialState);
+        // Move to an uppercase element type (Scene Heading / Character / Shot / Transition)
+        auto isUppercaseType = [](int state) {
+            return state == static_cast<int>(ScriptEditor::SceneHeading)
+                || state == static_cast<int>(ScriptEditor::CharacterName)
+                || state == static_cast<int>(ScriptEditor::Shot)
+                || state == static_cast<int>(ScriptEditor::Transition);
+        };
+
+        int safety = 0;
+        while (!isUppercaseType(editor.textCursor().block().userState()) && safety < 10) {
+            QTest::keyClick(&editor, Qt::Key_Tab);
+            ++safety;
+        }
+        QVERIFY2(isUppercaseType(editor.textCursor().block().userState()), "Expected to reach an uppercase element type");
 
         // Type new text - should be uppercase
         QTest::keyClicks(&editor, " test");
@@ -105,6 +114,30 @@ private slots:
         }
         
         QFAIL("Tab should cycle back to initial format");
+    }
+
+    void shiftTabCyclesBackward() {
+        ScriptEditor editor;
+        focusEditor(&editor);
+
+        int initialState = editor.textCursor().block().userState();
+        QTest::keyClick(&editor, Qt::Key_Tab);
+        int nextState = editor.textCursor().block().userState();
+        QVERIFY(nextState != initialState);
+
+        QTest::keyClick(&editor, Qt::Key_Backtab, Qt::ShiftModifier);
+        int backState = editor.textCursor().block().userState();
+        QCOMPARE(backState, initialState);
+    }
+
+    void newDocumentStartsAndStaysSceneHeadingOnFirstTyping() {
+        ScriptEditor editor;
+        focusEditor(&editor);
+
+        QCOMPARE(editor.textCursor().block().userState(), static_cast<int>(ScriptEditor::SceneHeading));
+
+        QTest::keyClick(&editor, Qt::Key_A);
+        QCOMPARE(editor.textCursor().block().userState(), static_cast<int>(ScriptEditor::SceneHeading));
     }
 };
 

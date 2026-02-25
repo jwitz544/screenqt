@@ -22,9 +22,14 @@ public:
     bool saveToFile(const QString &filePath);
     bool loadFromFile(const QString &filePath);
     bool exportToPdf(const QString &filePath);
+    int zoomSteps() const { return m_zoomSteps; }
+    void setZoomSteps(int steps);
 
 public slots:
     void scrollToCursor();
+    void zoomInView();
+    void zoomOutView();
+    void resetZoom();
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -37,6 +42,8 @@ private:
     double inchToPxY(double inches) const;
     void layoutPages();
     void updatePagination();
+    void recalculatePageMetrics();
+    void applyZoom();
     int pageYOffset(int pageIndex) const; // Y offset for page N with gaps
     void enforcePageBreaks(); // Insert spacing at page boundaries
     int printableHeightPerPage() const;
@@ -78,6 +85,10 @@ private:
     // Scroll behavior
     static constexpr int SCROLL_X_MARGIN = 40;
     static constexpr int SCROLL_Y_MARGIN = 120;
+    static constexpr double BASE_FONT_POINT_SIZE = 12.0;
+    static constexpr int MIN_ZOOM_STEPS = -8;
+    static constexpr int MAX_ZOOM_STEPS = 20;
+    static constexpr double ZOOM_STEP_MULTIPLIER = 1.1;
 
     QRect m_pageRect;       // Single page size (8.5x11")
     QRect m_printRect;      // Printable area inside one page
@@ -86,4 +97,6 @@ private:
     bool m_loading = false; // True during document load/initialization
     ScriptEditor* m_editor; // Editor placed inside printable area
     bool m_debugMode = true; // Enable debug overlay by default
+    int m_zoomSteps = 0;
+    double m_zoomFactor = 1.0;
 };

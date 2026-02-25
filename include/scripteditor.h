@@ -36,6 +36,9 @@ public:
 public slots:
     void undo();
     void redo();
+    void zoomInText();
+    void zoomOutText();
+    void resetZoom();
 
 protected:
     void keyPressEvent(QKeyEvent *e) override;
@@ -44,6 +47,7 @@ protected:
 
 private:
     ElementType nextType(ElementType t) const;
+    ElementType previousType(ElementType t) const;
     ElementType currentElement() const;
     double dpiX() const;
     double inchToPx(double inches) const;
@@ -55,6 +59,7 @@ private:
 
     QUndoStack m_undoStack;
     bool m_suppressUndo = false;
+    int m_zoomSteps = 0;
 
 signals:
     void elementChanged(ElementType type);

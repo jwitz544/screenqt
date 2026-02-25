@@ -1,4 +1,6 @@
 #include "pageview.h"
+#include "pdfexporter.h"
+#include "screenplayio.h"
 #include "scripteditor.h"
 #include <QGuiApplication>
 #include <QScreen>
@@ -11,15 +13,10 @@
 #include <QTextLayout>
 #include <QFrame>
 #include <QScrollArea>
-#include <QFile>
-#include <QTextStream>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonArray>
 #include <QDebug>
-#include <QPdfWriter>
 #include <QTimer>
 #include <cmath>
+
 namespace {
 int blockHeightPx(QTextDocument *doc, const QTextBlock &block) {
     return static_cast<int>(std::ceil(doc->documentLayout()->blockBoundingRect(block).height()));
@@ -32,19 +29,7 @@ PageView::PageView(QWidget *parent)
     qDebug() << "[PageView] Constructor starting";
     // Remove default document margin to align layout with page calculations
     m_editor->document()->setDocumentMargin(0);
-    // Compute fixed letter page size in pixels
-    int pageW = static_cast<int>(inchToPxX(PAGE_WIDTH_INCHES));
-    int pageH = static_cast<int>(inchToPxY(PAGE_HEIGHT_INCHES));
-    qDebug() << "[PageView] Page size:" << pageW << "x" << pageH;
-    m_pageRect = QRect(0, 0, pageW, pageH);
-
-    // Margins: Left 1.5", Right 1", Top 1", Bottom 1"
-    int left = static_cast<int>(inchToPxX(MARGIN_LEFT_INCHES));
-    int right = static_cast<int>(inchToPxX(MARGIN_RIGHT_INCHES));
-    int top = static_cast<int>(inchToPxY(MARGIN_TOP_INCHES));
-    int bottom = static_cast<int>(inchToPxY(MARGIN_BOTTOM_INCHES));
-    m_printRect = QRect(left, top, pageW - left - right, pageH - top - bottom);
-    qDebug() << "[PageView] Print rect:" << m_printRect;
+    recalculatePageMetrics();
 
     // Editor inside printable area; disable scrollbars so outer view handles scrolling
     m_editor->setFrameStyle(QFrame::NoFrame);
@@ -478,8 +463,75 @@ double PageView::dpiY() const
     return screen ? screen->logicalDotsPerInchY() : DEFAULT_DPI;
 }
 
-double PageView::inchToPxX(double inches) const { return inches * dpiX(); }
-double PageView::inchToPxY(double inches) const { return inches * dpiY(); }
+double PageView::inchToPxX(double inches) const { return inches * dpiX() * m_zoomFactor; }
+double PageView::inchToPxY(double inches) const { return inches * dpiY() * m_zoomFactor; }
+
+void PageView::recalculatePageMetrics()
+{
+    int pageW = static_cast<int>(inchToPxX(PAGE_WIDTH_INCHES));
+    int pageH = static_cast<int>(inchToPxY(PAGE_HEIGHT_INCHES));
+    m_pageRect = QRect(0, 0, pageW, pageH);
+
+    int left = static_cast<int>(inchToPxX(MARGIN_LEFT_INCHES));
+    int right = static_cast<int>(inchToPxX(MARGIN_RIGHT_INCHES));
+    int top = static_cast<int>(inchToPxY(MARGIN_TOP_INCHES));
+    int bottom = static_cast<int>(inchToPxY(MARGIN_BOTTOM_INCHES));
+    m_printRect = QRect(left, top, pageW - left - right, pageH - top - bottom);
+}
+
+void PageView::applyZoom()
+{
+    m_zoomFactor = std::pow(ZOOM_STEP_MULTIPLIER, m_zoomSteps);
+
+    QFont editorFont = m_editor->font();
+    editorFont.setPointSizeF(BASE_FONT_POINT_SIZE * m_zoomFactor);
+    m_editor->setFont(editorFont);
+
+    recalculatePageMetrics();
+    m_editor->formatDocument();
+    enforcePageBreaks();
+    updatePagination();
+    layoutPages();
+    update();
+}
+
+void PageView::zoomInView()
+{
+    if (m_zoomSteps >= MAX_ZOOM_STEPS) {
+        return;
+    }
+    ++m_zoomSteps;
+    applyZoom();
+}
+
+void PageView::zoomOutView()
+{
+    if (m_zoomSteps <= MIN_ZOOM_STEPS) {
+        return;
+    }
+    --m_zoomSteps;
+    applyZoom();
+}
+
+void PageView::resetZoom()
+{
+    if (m_zoomSteps == 0) {
+        return;
+    }
+    m_zoomSteps = 0;
+    applyZoom();
+}
+
+void PageView::setZoomSteps(int steps)
+{
+    const int clamped = qBound(MIN_ZOOM_STEPS, steps, MAX_ZOOM_STEPS);
+    if (clamped == m_zoomSteps) {
+        return;
+    }
+
+    m_zoomSteps = clamped;
+    applyZoom();
+}
 
 int PageView::pageYOffset(int pageIndex) const
 {
@@ -495,33 +547,18 @@ int PageView::pagePrintableStartY(int pageIndex) const
 bool PageView::saveToFile(const QString &filePath)
 {
     qDebug() << "[PageView] Saving to:" << filePath;
-    QFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly)) {
-        qDebug() << "[PageView] Failed to open file for writing";
+    const bool ok = ScreenplayIO::saveDocument(m_editor, filePath);
+
+    if (!ok) {
+        qDebug() << "[PageView] Failed to write file";
         return false;
     }
-    
-    QJsonArray lines;
-    QTextDocument *doc = m_editor->document();
-    QTextBlock block = doc->begin();
-    
-    while (block.isValid()) {
-        QJsonObject line;
-        line["text"] = block.text();
-        line["type"] = block.userState();
-        lines.append(line);
-        block = block.next();
+
+    int linesSaved = 0;
+    for (QTextBlock block = m_editor->document()->begin(); block.isValid(); block = block.next()) {
+        ++linesSaved;
     }
-    
-    QJsonObject root;
-    root["version"] = 1;
-    root["lines"] = lines;
-    
-    QJsonDocument jsonDoc(root);
-    file.write(jsonDoc.toJson());
-    file.close();
-    
-    qDebug() << "[PageView] Saved" << lines.size() << "lines";
+    qDebug() << "[PageView] Saved" << linesSaved << "lines";
     return true;
 }
 
@@ -529,49 +566,22 @@ bool PageView::loadFromFile(const QString &filePath)
 {
     qDebug() << "[PageView] Loading from:" << filePath;
     m_loading = true; // Prevent enforcePageBreaks during load
-    
-    QFile file(filePath);
-    if (!file.open(QIODevice::ReadOnly)) {
-        qDebug() << "[PageView] Failed to open file for reading";
+
+    int loadedLineCount = 0;
+    const bool ok = ScreenplayIO::loadDocument(m_editor, filePath, loadedLineCount);
+    if (!ok) {
+        qDebug() << "[PageView] Failed to load screenplay";
+        m_loading = false;
         return false;
     }
-    
-    QByteArray data = file.readAll();
-    file.close();
-    
-    QJsonDocument jsonDoc = QJsonDocument::fromJson(data);
-    if (jsonDoc.isNull() || !jsonDoc.isObject()) {
-        qDebug() << "[PageView] Invalid JSON";
-        return false;
-    }
-    
-    QJsonObject root = jsonDoc.object();
-    QJsonArray lines = root["lines"].toArray();
-    
-    m_editor->clear();
-    QTextCursor cursor(m_editor->document());
-    cursor.beginEditBlock();
-    
-    for (const QJsonValue &val : lines) {
-        QJsonObject line = val.toObject();
-        QString text = line["text"].toString();
-        int type = line["type"].toInt();
-        
-        cursor.insertText(text);
-        QTextBlock block = cursor.block();
-        block.setUserState(type);
-        cursor.insertText("\n");
-        cursor.movePosition(QTextCursor::NextBlock);
-    }
-    
-    cursor.endEditBlock();
+
     m_editor->moveCursor(QTextCursor::Start);
     qDebug() << "[PageView::loadFromFile] Before formatDocument, isUndoAvailable:" << m_editor->document()->isUndoAvailable();
     m_editor->formatDocument();
     qDebug() << "[PageView::loadFromFile] After formatDocument, isUndoAvailable:" << m_editor->document()->isUndoAvailable();
     
     // Clear loading flag, disconnect textChanged, run enforcePageBreaks once, clear undo, reconnect
-    QTimer::singleShot(0, this, [this, lines]() {
+    QTimer::singleShot(0, this, [this, loadedLineCount]() {
         m_loading = false;
         qDebug() << "[PageView::loadFromFile] Disconnecting textChanged signal";
         disconnect(m_editor, &QTextEdit::textChanged, this, &PageView::enforcePageBreaks);
@@ -579,7 +589,7 @@ bool PageView::loadFromFile(const QString &filePath)
         enforcePageBreaks(); // Run once with undo disabled
         
         m_editor->document()->clearUndoRedoStacks();
-        qDebug() << "[PageView::loadFromFile] Loaded" << lines.size() << "lines, loading complete, undo stack cleared, isUndoAvailable:" << m_editor->document()->isUndoAvailable();
+        qDebug() << "[PageView::loadFromFile] Loaded" << loadedLineCount << "lines, loading complete, undo stack cleared, isUndoAvailable:" << m_editor->document()->isUndoAvailable();
         
         qDebug() << "[PageView::loadFromFile] Reconnecting textChanged signal";
         connect(m_editor, &QTextEdit::textChanged, this, &PageView::enforcePageBreaks);
@@ -590,124 +600,26 @@ bool PageView::loadFromFile(const QString &filePath)
 
 bool PageView::exportToPdf(const QString &filePath)
 {
-    qDebug() << "[PageView] Exporting to PDF:" << filePath;
-    
-    // Create PDF writer with letter page size (8.5" x 11")
-    QPdfWriter writer(filePath);
-    writer.setPageSize(QPageSize::Letter);
-    writer.setResolution(PDF_RESOLUTION_DPI); // High quality output
-    
-    // Set margins: left 1.5", others 1"
-    QMarginsF margins(MARGIN_LEFT_INCHES, MARGIN_TOP_INCHES, MARGIN_RIGHT_INCHES, MARGIN_BOTTOM_INCHES); // in inches
-    writer.setPageMargins(margins, QPageLayout::Inch);
-    
-    // Start painting
-    QPainter painter(&writer);
-    
-    // Get the paintable area (already accounts for margins)
-    QRect paintRect = writer.pageLayout().paintRectPixels(writer.resolution());
-    qDebug() << "[PDF] PDF paintable area:" << paintRect;
-    
-    // Get document
-    QTextDocument *doc = m_editor->document();
-    const int printableH = printableHeightPerPage();
-    const int topMargin = m_printRect.top();
-    
-    qDebug() << "[PDF] Screen printable:" << m_printRect.width() << "x" << printableH;
-    qDebug() << "[PDF] Top margin:" << topMargin;
-    
-    // Calculate scale to fit screen printable area into PDF paintable area
-    qreal scaleX = static_cast<qreal>(paintRect.width()) / m_printRect.width();
-    qreal scaleY = static_cast<qreal>(paintRect.height()) / printableH;
-    qreal scale = qMin(scaleX, scaleY);
-    
-    qDebug() << "[PDF] Scale X:" << scaleX << "Y:" << scaleY << "-> Using:" << scale;
-    
-    // Render each page by clipping the document
-    int totalPages = m_pageCount;
-    qDebug() << "[PDF] Total pages to export:" << totalPages;
-    
-    for (int pageNum = 0; pageNum < totalPages; ++pageNum) {
-        if (pageNum > 0) {
-            qDebug() << "[PDF] Creating new page" << (pageNum + 1);
-            writer.newPage();
-        }
-        
-        qDebug() << "[PDF] ===== DRAWING PAGE" << (pageNum + 1) << "=====";
-        
-        painter.save();
-        painter.scale(scale, scale);
-        
-        // Find where content actually starts on this page
-        // For pages after the first, enforcePageBreaks adds large margins to push blocks to new pages
-        // We need to find the first block that's visible on this page
-        int pageContentStart = 0;
-        int pageContentEnd = printableH;
-        
-        if (pageNum > 0) {
-            // Find the first block whose content appears on this page
-            int currentY = 0;
-            QTextBlock block = doc->begin();
-            while (block.isValid()) {
-                QTextLayout *layout = block.layout();
-                int blockHeight = static_cast<int>(std::ceil(layout->boundingRect().height()));
-                int blockTopMargin = static_cast<int>(block.blockFormat().topMargin());
-                int contentStartY = currentY + blockTopMargin;
-                
-                // If this block's content starts on or after our target page area, use it
-                int expectedPageStart = (printableH + PAGE_GAP_PX) * pageNum;
-                if (contentStartY >= expectedPageStart) {
-                    pageContentStart = contentStartY;
-                    pageContentEnd = contentStartY + printableH;
-                    qDebug() << "[PDF] Page" << (pageNum + 1) << "first block content at Y=" << contentStartY
-                             << "text:" << block.text().left(40);
-                    break;
-                }
-                
-                currentY += blockTopMargin + blockHeight;
-                block = block.next();
-            }
-        }
-        
-        qDebug() << "[PDF] Page" << (pageNum + 1) << "content range:" << pageContentStart << "-" << pageContentEnd;
-        
-        // Translate to position this page's content at Y=0
-        painter.translate(0, -pageContentStart);
-        
-        // Clip to show only this page's printable content
-        QRectF clipRect(0, pageContentStart, m_printRect.width(), printableH);
-        painter.setClipRect(clipRect);
-        
-        qDebug() << "[PDF] Translate:" << -pageContentStart << "Clip rect:" << clipRect;
-        
-        // Draw the entire document (clipped to current page)
-        QAbstractTextDocumentLayout::PaintContext context;
-        context.clip = clipRect;
-        context.palette.setColor(QPalette::Text, Qt::black);
-        doc->documentLayout()->draw(&painter, context);
-        
-        painter.restore();
-        
-        // Add page number in top right (after restoring from scaled context)
-        painter.save();
-        QFont pageNumFont("Courier New", PDF_PAGE_NUM_FONT_SIZE);
-        pageNumFont.setPointSizeF(PDF_PAGE_NUM_FONT_SIZE);
-        painter.setFont(pageNumFont);
-        painter.setPen(Qt::black);
-        
-        // Position in top right of paintable area
-        QString pageNumStr = QString::number(pageNum + 1) + ".";
-        QRectF pageNumRect(paintRect.width() - PDF_PAGE_NUM_RIGHT_OFFSET, PDF_PAGE_NUM_TOP_OFFSET, PDF_PAGE_NUM_WIDTH, PDF_PAGE_NUM_HEIGHT);
-        painter.drawText(pageNumRect, Qt::AlignRight | Qt::AlignTop, pageNumStr);
-        painter.restore();
-        
-        qDebug() << "[PDF] Page" << (pageNum + 1) << "rendering complete";
-    }
-    
-    painter.end();
-    
-    qDebug() << "[PageView] PDF export completed successfully";
-    return true;
+    PdfExporter::Settings settings;
+    settings.pageCount = m_pageCount;
+    settings.pageGapPx = PAGE_GAP_PX;
+    settings.printableWidthPx = m_printRect.width();
+    settings.printableHeightPx = printableHeightPerPage();
+    settings.topMarginPx = m_printRect.top();
+
+    settings.marginLeftInches = MARGIN_LEFT_INCHES;
+    settings.marginRightInches = MARGIN_RIGHT_INCHES;
+    settings.marginTopInches = MARGIN_TOP_INCHES;
+    settings.marginBottomInches = MARGIN_BOTTOM_INCHES;
+
+    settings.resolutionDpi = PDF_RESOLUTION_DPI;
+    settings.pageNumberFontSize = PDF_PAGE_NUM_FONT_SIZE;
+    settings.pageNumberWidth = PDF_PAGE_NUM_WIDTH;
+    settings.pageNumberHeight = PDF_PAGE_NUM_HEIGHT;
+    settings.pageNumberRightOffset = PDF_PAGE_NUM_RIGHT_OFFSET;
+    settings.pageNumberTopOffset = PDF_PAGE_NUM_TOP_OFFSET;
+
+    return PdfExporter::exportDocumentToPdf(m_editor->document(), filePath, settings);
 }
 
 int PageView::printableHeightPerPage() const

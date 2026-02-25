@@ -51,7 +51,7 @@ void StartScreen::onLoad()
         this,
         "Open Screenplay",
         "",
-        "Screenplay Files (*.sqt);;All Files (*)"
+        "ScreenQt Files (*.sqt);;All Files (*)"
     );
     
     if (!filePath.isEmpty()) {
