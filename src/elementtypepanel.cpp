@@ -4,6 +4,7 @@
 #include <QLabel>
 #include <QCheckBox>
 #include <QSizePolicy>
+#include <QFrame>
 
 namespace {
 QString buttonStyle(bool checked, bool isFirst, bool isLast)
@@ -50,17 +51,25 @@ ElementTypePanel::ElementTypePanel(QWidget *parent)
     : QWidget(parent), m_currentType(ScriptEditor::SceneHeading), m_pageView(nullptr) {
     setMinimumHeight(90);
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    setStyleSheet("background: #f4f6fb;");
     
     QVBoxLayout *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(6);
+    layout->setContentsMargins(10, 10, 10, 10);
+    layout->setSpacing(8);
     
     // Title
     QLabel *titleLabel = new QLabel("Element Type", this);
-    titleLabel->setStyleSheet("font-weight: 600; font-size: 13px; color: #202124; padding: 0 2px;");
+    titleLabel->setStyleSheet("font-weight: 700; font-size: 13px; color: #111827; padding: 0 2px;");
     layout->addWidget(titleLabel);
 
-    QWidget *buttonGroup = new QWidget(this);
+    QFrame *buttonGroup = new QFrame(this);
+    buttonGroup->setStyleSheet(
+        "QFrame {"
+        "  background: #ffffff;"
+        "  border: 1px solid #d0d7de;"
+        "  border-radius: 10px;"
+        "}"
+    );
     QVBoxLayout *buttonLayout = new QVBoxLayout(buttonGroup);
     buttonLayout->setContentsMargins(0, 0, 0, 0);
     buttonLayout->setSpacing(0);
@@ -77,7 +86,7 @@ ElementTypePanel::ElementTypePanel(QWidget *parent)
     };
     
     for (int i = 0; i < ScriptEditor::ElementCount; ++i) {
-        m_buttons[i] = new QPushButton(typeNames[i], this);
+        m_buttons[i] = new QPushButton(typeNames[i], buttonGroup);
         m_buttons[i]->setCheckable(true);
         m_buttons[i]->setMinimumHeight(32);
         m_buttons[i]->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -96,6 +105,11 @@ ElementTypePanel::ElementTypePanel(QWidget *parent)
     
     // Debug checkbox
     m_debugCheckbox = new QCheckBox("Debug Mode", this);
+    m_debugCheckbox->setStyleSheet(
+        "QCheckBox { color: #374151; font-size: 12px; spacing: 8px; padding-left: 2px; }"
+        "QCheckBox::indicator { width: 14px; height: 14px; border: 1px solid #9ca3af; border-radius: 4px; background: white; }"
+        "QCheckBox::indicator:checked { background: #1f6feb; border-color: #1f6feb; }"
+    );
     m_debugCheckbox->setChecked(true);
     layout->addWidget(m_debugCheckbox);
     

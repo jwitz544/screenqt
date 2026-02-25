@@ -58,6 +58,45 @@ int main(int argc, char *argv[])
     QMainWindow window;
     window.setWindowTitle("ScreenQt");
     window.resize(900, 700);
+    window.setDockOptions(QMainWindow::AnimatedDocks | QMainWindow::AllowNestedDocks | QMainWindow::GroupedDragging);
+    window.setStyleSheet(
+        "QMainWindow { background: #eef1f5; }"
+        "QMenuBar {"
+        "  background: #f8fafc;"
+        "  border-bottom: 1px solid #d9dee6;"
+        "  padding: 2px 6px;"
+        "}"
+        "QMenuBar::item {"
+        "  spacing: 8px;"
+        "  padding: 6px 10px;"
+        "  border-radius: 6px;"
+        "  color: #1f2937;"
+        "}"
+        "QMenuBar::item:selected { background: #e8eef8; }"
+        "QMenu {"
+        "  background: #ffffff;"
+        "  border: 1px solid #d0d7de;"
+        "  padding: 6px;"
+        "}"
+        "QMenu::item {"
+        "  padding: 6px 24px;"
+        "  border-radius: 6px;"
+        "}"
+        "QMenu::item:selected { background: #e8eef8; }"
+        "QDockWidget {"
+        "  font-size: 12px;"
+        "  titlebar-close-icon: none;"
+        "  titlebar-normal-icon: none;"
+        "}"
+        "QDockWidget::title {"
+        "  background: #f8fafc;"
+        "  border: 1px solid #d0d7de;"
+        "  border-bottom: none;"
+        "  color: #374151;"
+        "  padding: 6px 10px;"
+        "  text-align: left;"
+        "}"
+    );
     qDebug() << "[Main] Window created and resized to 900x700";
 
     QSettings settings("ScreenQt", "ScreenQt");

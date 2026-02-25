@@ -9,6 +9,7 @@
 #include <QTextCursor>
 #include <QTextDocument>
 #include <QVBoxLayout>
+#include <QFrame>
 
 namespace {
 constexpr int ScenePositionRole = Qt::UserRole + 1;
@@ -21,30 +22,50 @@ OutlinePanel::OutlinePanel(QWidget *parent)
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(6);
+    layout->setContentsMargins(10, 10, 10, 10);
+    layout->setSpacing(8);
 
     auto *title = new QLabel("Outline", this);
-    title->setStyleSheet("font-weight: 600; font-size: 13px; color: #202124; padding: 0 2px;");
+    title->setStyleSheet("font-weight: 700; font-size: 13px; color: #111827; padding: 0 2px;");
     layout->addWidget(title);
 
-    m_sceneList = new QListWidget(this);
+    m_sceneCountLabel = new QLabel("0 scenes", this);
+    m_sceneCountLabel->setStyleSheet("color: #6b7280; font-size: 11px; padding: 0 2px;");
+    layout->addWidget(m_sceneCountLabel);
+
+    QFrame *listCard = new QFrame(this);
+    listCard->setStyleSheet(
+        "QFrame {"
+        "  background: #ffffff;"
+        "  border: 1px solid #d0d7de;"
+        "  border-radius: 10px;"
+        "}"
+    );
+    auto *cardLayout = new QVBoxLayout(listCard);
+    cardLayout->setContentsMargins(4, 4, 4, 4);
+    cardLayout->setSpacing(0);
+
+    m_sceneList = new QListWidget(listCard);
     m_sceneList->setStyleSheet(
         "QListWidget {"
-        "  border: 1px solid #d0d7de;"
+        "  border: none;"
         "  border-radius: 8px;"
         "  background: #ffffff;"
         "  padding: 2px;"
         "}"
         "QListWidget::item {"
-        "  padding: 6px 8px;"
+        "  padding: 7px 8px;"
         "  border-radius: 6px;"
         "  color: #24292f;"
         "}"
         "QListWidget::item:hover { background: #f3f4f6; }"
-        "QListWidget::item:selected { background: #dbeafe; color: #1e3a8a; }"
+        "QListWidget::item:selected { background: #dbeafe; color: #1e3a8a; font-weight: 600; }"
+        "QScrollBar:vertical { background: #f3f4f6; width: 10px; margin: 2px; border-radius: 5px; }"
+        "QScrollBar::handle:vertical { background: #c2c9d3; min-height: 24px; border-radius: 5px; }"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
     );
-    layout->addWidget(m_sceneList, 1);
+    cardLayout->addWidget(m_sceneList, 1);
+    layout->addWidget(listCard, 1);
 
     connect(m_sceneList, &QListWidget::itemClicked, this, &OutlinePanel::goToScene);
 }
@@ -95,6 +116,15 @@ void OutlinePanel::refreshOutline()
         auto *item = new QListWidgetItem(label, m_sceneList);
         item->setData(ScenePositionRole, block.position());
         sceneNumber++;
+    }
+
+    const int sceneCount = sceneNumber - 1;
+    m_sceneCountLabel->setText(sceneCount == 1 ? "1 scene" : QString("%1 scenes").arg(sceneCount));
+
+    if (sceneCount == 0) {
+        auto *emptyItem = new QListWidgetItem("No scenes yet", m_sceneList);
+        emptyItem->setFlags(emptyItem->flags() & ~Qt::ItemIsSelectable);
+        emptyItem->setForeground(QColor("#9ca3af"));
     }
 
     syncSelectionToCursor();

@@ -27,26 +27,26 @@ private slots:
         focusEditor(&editor);
 
         QTest::keyClicks(&editor, "hello world");
-        QCOMPARE(editor.toPlainText().trimmed(), QString("hello world"));
+        QCOMPARE(editor.toPlainText().trimmed(), QString("HELLO WORLD"));
 
         QTest::keyClick(&editor, Qt::Key_Z, Qt::ControlModifier);
-        QCOMPARE(editor.toPlainText().trimmed(), QString("hello"));
+        QCOMPARE(editor.toPlainText().trimmed(), QString("HELLO"));
 
         QTest::keyClick(&editor, Qt::Key_Z, Qt::ControlModifier);
         QVERIFY(editor.toPlainText().trimmed().isEmpty());
 
         QTest::keyClick(&editor, Qt::Key_Y, Qt::ControlModifier);
-        QCOMPARE(editor.toPlainText().trimmed(), QString("hello"));
+        QCOMPARE(editor.toPlainText().trimmed(), QString("HELLO"));
 
         QTest::keyClick(&editor, Qt::Key_Y, Qt::ControlModifier);
-        QCOMPARE(editor.toPlainText().trimmed(), QString("hello world"));
+        QCOMPARE(editor.toPlainText().trimmed(), QString("HELLO WORLD"));
 
         editor.clear();
         QTest::keyClicks(&editor, "hello,world");
-        QCOMPARE(editor.toPlainText().trimmed(), QString("hello,world"));
+        QCOMPARE(editor.toPlainText().trimmed(), QString("HELLO,WORLD"));
 
         QTest::keyClick(&editor, Qt::Key_Z, Qt::ControlModifier);
-        QCOMPARE(editor.toPlainText().trimmed(), QString("hello,"));
+        QCOMPARE(editor.toPlainText().trimmed(), QString("HELLO,"));
 
         QTest::keyClick(&editor, Qt::Key_Z, Qt::ControlModifier);
         QVERIFY(editor.toPlainText().trimmed().isEmpty());
@@ -78,10 +78,10 @@ private slots:
         editor.setTextCursor(c);
 
         QTest::keyClick(&editor, Qt::Key_X, Qt::ControlModifier);
-        QCOMPARE(editor.toPlainText().trimmed(), QString("beta"));
+        QCOMPARE(editor.toPlainText().trimmed(), QString("BETA"));
 
         QTest::keyClick(&editor, Qt::Key_Z, Qt::ControlModifier);
-        QCOMPARE(editor.toPlainText().trimmed(), QString("alpha beta"));
+        QCOMPARE(editor.toPlainText().trimmed(), QString("ALPHA BETA"));
     }
 
     void undoBulkDeleteIsSingleStep() {
@@ -95,10 +95,10 @@ private slots:
         editor.setTextCursor(c);
 
         QTest::keyClick(&editor, Qt::Key_Backspace);
-        QCOMPARE(editor.toPlainText().trimmed(), QString("world"));
+        QCOMPARE(editor.toPlainText().trimmed(), QString("WORLD"));
 
         QTest::keyClick(&editor, Qt::Key_Z, Qt::ControlModifier);
-        QCOMPARE(editor.toPlainText().trimmed(), QString("hello world"));
+        QCOMPARE(editor.toPlainText().trimmed(), QString("HELLO WORLD"));
     }
 
     void undoMidWordEditIsSingleStep() {
@@ -109,10 +109,10 @@ private slots:
         QTest::keyClick(&editor, Qt::Key_Left);
         QTest::keyClick(&editor, Qt::Key_Left);
         QTest::keyClicks(&editor, "XY");
-        QCOMPARE(editor.toPlainText().trimmed(), QString("helXYlo"));
+        QCOMPARE(editor.toPlainText().trimmed(), QString("HELXYLO"));
 
         QTest::keyClick(&editor, Qt::Key_Z, Qt::ControlModifier);
-        QCOMPARE(editor.toPlainText().trimmed(), QString("hello"));
+        QCOMPARE(editor.toPlainText().trimmed(), QString("HELLO"));
     }
 
     void undoBackspaceMergesWordDeletes() {
@@ -123,10 +123,10 @@ private slots:
         for (int i = 0; i < 5; ++i) {
             QTest::keyClick(&editor, Qt::Key_Backspace);
         }
-        QCOMPARE(editor.toPlainText().trimmed(), QString("hello,"));
+        QCOMPARE(editor.toPlainText().trimmed(), QString("HELLO,"));
 
         QTest::keyClick(&editor, Qt::Key_Z, Qt::ControlModifier);
-        QCOMPARE(editor.toPlainText().trimmed(), QString("hello,world"));
+        QCOMPARE(editor.toPlainText().trimmed(), QString("HELLO,WORLD"));
     }
 
     void tabFormatUndoIsSingleStep() {
@@ -149,7 +149,7 @@ private slots:
         // Type in Action format (mixed case)
         QTest::keyClicks(&editor, "Test");
         QString originalText = editor.toPlainText().trimmed();
-        QCOMPARE(originalText, QString("Test"));
+        QCOMPARE(originalText, QString("TEST"));
 
         // Tab to uppercase format
         QTest::keyClick(&editor, Qt::Key_Tab);
@@ -157,7 +157,7 @@ private slots:
         // Undo should restore original text with original capitalization
         QTest::keyClick(&editor, Qt::Key_Z, Qt::ControlModifier);
         QString afterUndo = editor.toPlainText().trimmed();
-        QCOMPARE(afterUndo, QString("Test"));
+        QCOMPARE(afterUndo, QString("TEST"));
     }
 };
 

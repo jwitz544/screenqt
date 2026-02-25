@@ -34,6 +34,7 @@ public:
 
 
 public slots:
+    void clear();
     void undo();
     void redo();
     void zoomInText();

@@ -4,6 +4,7 @@
 
 class QListWidget;
 class QListWidgetItem;
+class QLabel;
 class ScriptEditor;
 
 class OutlinePanel : public QWidget {
@@ -21,5 +22,6 @@ private slots:
 private:
     ScriptEditor *m_editor = nullptr;
     QListWidget *m_sceneList = nullptr;
+    QLabel *m_sceneCountLabel = nullptr;
     bool m_updatingSelection = false;
 };

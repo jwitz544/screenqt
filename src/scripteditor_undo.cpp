@@ -57,6 +57,16 @@ bool InsertTextCommand::mergeWith(const QUndoCommand *other)
         qDebug() << "  Result: text='" << m_text << "' type=" << (int)m_type << " (changed to Word)";
         return true;
     }
+
+    // Allow trailing punctuation to merge into the current word (e.g. "hello,")
+    if (m_type == ScriptEditor::UndoGroupType::Word &&
+        o->m_type == ScriptEditor::UndoGroupType::Punctuation) {
+        qDebug() << "  ACCEPTED: Word merging with trailing punctuation";
+        m_text += o->m_text;
+        m_type = ScriptEditor::UndoGroupType::Punctuation;
+        qDebug() << "  Result: text='" << m_text << "' type=" << (int)m_type << " (changed to Punctuation)";
+        return true;
+    }
     
     qDebug() << "  REJECTED: no matching merge rule";
     return false;

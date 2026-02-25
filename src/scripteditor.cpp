@@ -229,8 +229,10 @@ void ScriptEditor::keyPressEvent(QKeyEvent *e)
         }
 
         UndoGroupType type = classifyChar(text.at(0));
-        // Words, Whitespace, and Punctuation can all merge (will be merged into by next Word)
-        bool allowMerge = (type == UndoGroupType::Word || type == UndoGroupType::Whitespace);
+        // Words, whitespace, and punctuation can merge for natural undo groupings.
+        bool allowMerge = (type == UndoGroupType::Word ||
+                   type == UndoGroupType::Whitespace ||
+                   type == UndoGroupType::Punctuation);
         qDebug() << "[ScriptEditor] Pushing InsertTextCommand: pos=" << insertPos << "text='" << text << "' type=" << (int)type << "allowMerge=" << allowMerge;
         m_undoStack.push(new InsertTextCommand(this, insertPos, text, type, allowMerge));
         return;
@@ -327,6 +329,13 @@ void ScriptEditor::undo()
 {
     qDebug() << "[ScriptEditor] Undo called, undoAvailable:" << m_undoStack.canUndo();
     m_undoStack.undo();
+}
+
+void ScriptEditor::clear()
+{
+    QTextEdit::clear();
+    m_undoStack.clear();
+    applyFormatDirect(SceneHeading);
 }
 
 void ScriptEditor::redo()
