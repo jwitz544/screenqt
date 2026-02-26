@@ -5,6 +5,9 @@
 #include <QGuiApplication>
 #include <QUndoStack>
 
+class QCompleter;
+class QStringListModel;
+
 class ScriptEditor : public QTextEdit {
     Q_OBJECT
 public:
@@ -52,6 +55,13 @@ private:
     ElementType currentElement() const;
     double dpiX() const;
     double inchToPx(double inches) const;
+    QStringList collectCharacterNames() const;
+    QStringList sceneHeadingCompletions() const;
+    QStringList completionCandidates(ElementType type, const QString &prefix) const;
+    void showCompletionPopup(ElementType type, const QString &prefix);
+    void hideCompletionPopup();
+    void insertChosenCompletion(const QString &completion);
+    QString resolveInlineCompletion(ElementType type, const QString &prefix) const;
 
     UndoGroupType classifyChar(QChar ch) const;
     bool isNavigationKey(QKeyEvent *e) const;
@@ -61,6 +71,10 @@ private:
     QUndoStack m_undoStack;
     bool m_suppressUndo = false;
     int m_zoomSteps = 0;
+    QCompleter *m_completer = nullptr;
+    QStringListModel *m_completionModel = nullptr;
+    QString m_completionPrefix;
+    ElementType m_completionType = Action;
 
 signals:
     void elementChanged(ElementType type);

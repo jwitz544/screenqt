@@ -1,7 +1,6 @@
 #pragma once
 #include <QWidget>
 #include <QPushButton>
-#include <QCheckBox>
 #include "scripteditor.h"
 
 class ElementTypePanel : public QWidget {
@@ -18,6 +17,5 @@ private:
     void updateHighlight(ScriptEditor::ElementType type);
     QPushButton *m_buttons[ScriptEditor::ElementCount];
     ScriptEditor::ElementType m_currentType;
-    QCheckBox *m_debugCheckbox;
     class PageView *m_pageView;
 };

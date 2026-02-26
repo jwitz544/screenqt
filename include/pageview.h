@@ -66,8 +66,8 @@ private:
     static constexpr double DEFAULT_DPI = 96.0;         // Fallback DPI if screen unavailable
     
     // Background colors
-    static constexpr int BG_GRAY_VALUE = 230;           // Background gray (230, 230, 230)
-    static constexpr int BORDER_GRAY_VALUE = 200;       // Page border gray (200, 200, 200)
+    static constexpr int BG_GRAY_VALUE = 28;            // Main app dark gray (#1C1C1E)
+    static constexpr int BORDER_GRAY_VALUE = 70;        // Soft page border in dark mode
     
     // Page number display
     static constexpr int PAGE_NUM_FONT_SIZE = 10;
@@ -85,7 +85,7 @@ private:
     // Scroll behavior
     static constexpr int SCROLL_X_MARGIN = 40;
     static constexpr int SCROLL_Y_MARGIN = 120;
-    static constexpr double BASE_FONT_POINT_SIZE = 12.0;
+    static constexpr double BASE_FONT_POINT_SIZE = 15.0;
     static constexpr int MIN_ZOOM_STEPS = -8;
     static constexpr int MAX_ZOOM_STEPS = 20;
     static constexpr double ZOOM_STEP_MULTIPLIER = 1.1;
@@ -96,7 +96,7 @@ private:
     bool m_enforcingBreaks = false; // Guard against recursive calls
     bool m_loading = false; // True during document load/initialization
     ScriptEditor* m_editor; // Editor placed inside printable area
-    bool m_debugMode = true; // Enable debug overlay by default
+    bool m_debugMode = false;
     int m_zoomSteps = 0;
     double m_zoomFactor = 1.0;
 };

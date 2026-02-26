@@ -7,11 +7,15 @@
 StartScreen::StartScreen(QWidget *parent)
     : QWidget(parent)
 {
+    setObjectName("startScreen");
+
     QVBoxLayout *layout = new QVBoxLayout(this);
-    layout->setSpacing(20);
+    layout->setContentsMargins(16, 16, 16, 16);
+    layout->setSpacing(16);
     layout->setAlignment(Qt::AlignCenter);
     
     QLabel *title = new QLabel("ScreenQt", this);
+    title->setObjectName("startTitle");
     QFont titleFont = title->font();
     titleFont.setPointSize(32);
     titleFont.setBold(true);
@@ -19,15 +23,15 @@ StartScreen::StartScreen(QWidget *parent)
     title->setAlignment(Qt::AlignCenter);
     
     QPushButton *newBtn = new QPushButton("New Screenplay", this);
+    newBtn->setObjectName("startPrimaryButton");
     newBtn->setMinimumSize(200, 50);
-    newBtn->setStyleSheet("font-size: 16px; padding: 10px;");
     
     QPushButton *loadBtn = new QPushButton("Load Screenplay", this);
+    loadBtn->setObjectName("startSecondaryButton");
     loadBtn->setMinimumSize(200, 50);
-    loadBtn->setStyleSheet("font-size: 16px; padding: 10px;");
     
     layout->addWidget(title);
-    layout->addSpacing(30);
+    layout->addSpacing(24);
     layout->addWidget(newBtn);
     layout->addWidget(loadBtn);
     layout->addStretch();

@@ -21,6 +21,10 @@ namespace {
 int blockHeightPx(QTextDocument *doc, const QTextBlock &block) {
     return static_cast<int>(std::ceil(doc->documentLayout()->blockBoundingRect(block).height()));
 }
+
+const QColor kPaperColor(246, 246, 242);
+const QColor kPageTextColor(36, 38, 44);
+const QColor kPageNumberColor(92, 96, 106);
 }
 
 PageView::PageView(QWidget *parent)
@@ -39,6 +43,7 @@ PageView::PageView(QWidget *parent)
     // Make editor background transparent so page gaps show through
     QPalette pal = m_editor->palette();
     pal.setColor(QPalette::Base, Qt::transparent);
+    pal.setColor(QPalette::Text, kPageTextColor);
     m_editor->setPalette(pal);
     m_editor->setAutoFillBackground(false);
     m_editor->viewport()->setAutoFillBackground(false);
@@ -66,19 +71,19 @@ void PageView::paintEvent(QPaintEvent *event)
     for (int i = 0; i < m_pageCount; ++i) {
         int yOff = pageYOffset(i);
         QRect pageRect(x, yOff, m_pageRect.width(), m_pageRect.height());
-        p.fillRect(pageRect, Qt::white);
+        p.fillRect(pageRect, kPaperColor);
         p.setPen(QPen(QColor(BORDER_GRAY_VALUE, BORDER_GRAY_VALUE, BORDER_GRAY_VALUE)));
         p.drawRect(pageRect.adjusted(0, 0, -1, -1));
         
         // Draw white rectangle for printable area to ensure text has white background
         QRect printableRect = m_printRect.translated(pageRect.topLeft());
-        p.fillRect(printableRect, Qt::white);
+        p.fillRect(printableRect, kPaperColor);
         
         // Draw page number in top right corner
         QString pageNumStr = QString::number(i + 1) + ".";
         QFont pageNumFont("Courier New", PAGE_NUM_FONT_SIZE);
         p.setFont(pageNumFont);
-        p.setPen(Qt::black);
+        p.setPen(kPageNumberColor);
         QRect pageNumRect = pageRect.adjusted(0, PAGE_NUM_TOP_OFFSET, -PAGE_NUM_RIGHT_MARGIN, 0);
         p.drawText(pageNumRect, Qt::AlignTop | Qt::AlignRight, pageNumStr);
     }

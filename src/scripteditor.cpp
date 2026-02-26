@@ -12,6 +12,11 @@
 #include <QMouseEvent>
 #include <QFocusEvent>
 #include <QClipboard>
+#include <QCompleter>
+#include <QStringListModel>
+#include <QAbstractItemView>
+#include <QApplication>
+#include <QSet>
 #include "scripteditor_undo.h"
 
 using ScriptEditorUndo::CompoundCommand;
@@ -23,8 +28,11 @@ using ScriptEditorUndo::normalizeSelectedText;
 ScriptEditor::ScriptEditor(QWidget *parent)
     : QTextEdit(parent)
 {
-    // Basic font: Courier 12
-    QFont f("Courier New", 12);
+    setObjectName("scriptEditor");
+
+    // Basic screenplay font
+    QFont f("Courier New");
+    f.setPointSizeF(15.0);
     f.setStyleHint(QFont::TypeWriter);
     setFont(f);
 
@@ -38,6 +46,39 @@ ScriptEditor::ScriptEditor(QWidget *parent)
     qDebug() << "[ScriptEditor] Constructor: Disabling document undo/redo";
     document()->setUndoRedoEnabled(false);
     setUndoRedoEnabled(false);
+
+    m_completionModel = new QStringListModel(this);
+    m_completer = new QCompleter(m_completionModel, this);
+    m_completer->setWidget(this);
+    m_completer->setCompletionMode(QCompleter::PopupCompletion);
+    m_completer->setCaseSensitivity(Qt::CaseInsensitive);
+    m_completer->setWrapAround(false);
+    m_completer->setMaxVisibleItems(8);
+    m_completer->popup()->setObjectName("scriptEditorCompleterPopup");
+    m_completer->popup()->setFont(QApplication::font());
+    m_completer->popup()->setStyleSheet(
+        "QAbstractItemView#scriptEditorCompleterPopup {"
+        "  background: #22262D;"
+        "  color: #C9D1DD;"
+        "  border: 1px solid #303846;"
+        "  border-radius: 6px;"
+        "  padding: 4px;"
+        "  outline: none;"
+        "  font-size: 12px;"
+        "}"
+        "QAbstractItemView#scriptEditorCompleterPopup::item {"
+        "  padding: 6px 8px;"
+        "  border-radius: 4px;"
+        "}"
+        "QAbstractItemView#scriptEditorCompleterPopup::item:hover { background: #272C35; }"
+        "QAbstractItemView#scriptEditorCompleterPopup::item:selected {"
+        "  background: #2A3240;"
+        "  color: #C9D1DD;"
+        "}"
+    );
+    connect(m_completer, qOverload<const QString &>(&QCompleter::activated), this, [this](const QString &completion) {
+        insertChosenCompletion(completion);
+    });
 
     // Start with Scene Heading element without pushing undo state
     applyFormatDirect(SceneHeading);
@@ -61,12 +102,30 @@ void ScriptEditor::keyPressEvent(QKeyEvent *e)
 {
     qDebug() << "[ScriptEditor] keyPressEvent: key=" << e->key() << "text=" << e->text() << "modifiers=" << e->modifiers();
 
+    if (m_completer && m_completer->popup()->isVisible()) {
+        switch (e->key()) {
+        case Qt::Key_Return:
+        case Qt::Key_Enter:
+        case Qt::Key_Escape:
+        case Qt::Key_Tab:
+        case Qt::Key_Backtab:
+        case Qt::Key_Up:
+        case Qt::Key_Down:
+            e->ignore();
+            return;
+        default:
+            break;
+        }
+    }
+
     if (isNavigationKey(e)) {
+        hideCompletionPopup();
         QTextEdit::keyPressEvent(e);
         return;
     }
 
     if (e->matches(QKeySequence::Undo)) {
+        hideCompletionPopup();
         qDebug() << "[ScriptEditor] Undo keystroke intercepted. Stack has" << m_undoStack.count() << "commands, canUndo=" << m_undoStack.canUndo();
         m_undoStack.undo();
         qDebug() << "[ScriptEditor] After undo: Stack has" << m_undoStack.count() << "commands, canUndo=" << m_undoStack.canUndo();
@@ -74,12 +133,14 @@ void ScriptEditor::keyPressEvent(QKeyEvent *e)
     }
 
     if (e->matches(QKeySequence::Redo)) {
+        hideCompletionPopup();
         qDebug() << "[ScriptEditor] Redo keystroke intercepted";
         m_undoStack.redo();
         return;
     }
 
     if (e->matches(QKeySequence::Paste)) {
+        hideCompletionPopup();
         QTextCursor cursor = textCursor();
         QString text = QGuiApplication::clipboard()->text();
         if (text.isEmpty()) {
@@ -106,6 +167,7 @@ void ScriptEditor::keyPressEvent(QKeyEvent *e)
     }
 
     if (e->matches(QKeySequence::Cut)) {
+        hideCompletionPopup();
         QTextCursor cursor = textCursor();
         if (!cursor.hasSelection()) {
             return;
@@ -118,6 +180,7 @@ void ScriptEditor::keyPressEvent(QKeyEvent *e)
     }
 
     if (e->key() == Qt::Key_Backtab || (e->key() == Qt::Key_Tab && e->modifiers() == Qt::ShiftModifier)) {
+        hideCompletionPopup();
         QTextCursor c = textCursor();
         QTextBlock block = c.block();
         int state = block.userState();
@@ -129,6 +192,7 @@ void ScriptEditor::keyPressEvent(QKeyEvent *e)
     }
 
     if (e->key() == Qt::Key_Tab && !e->modifiers()) {
+        hideCompletionPopup();
         QTextCursor c = textCursor();
         QTextBlock block = c.block();
         int state = block.userState();
@@ -140,6 +204,7 @@ void ScriptEditor::keyPressEvent(QKeyEvent *e)
     }
 
     if ((e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) && !e->modifiers()) {
+        hideCompletionPopup();
         QTextCursor c = textCursor();
         QTextBlock block = c.block();
         int state = block.userState();
@@ -174,6 +239,7 @@ void ScriptEditor::keyPressEvent(QKeyEvent *e)
     bool hasSelection = cursor.hasSelection();
 
     if (e->key() == Qt::Key_Backspace || e->key() == Qt::Key_Delete) {
+        hideCompletionPopup();
         if (hasSelection) {
             int selStart = cursor.selectionStart();
             QString selText = normalizeSelectedText(cursor.selectedText());
@@ -228,15 +294,42 @@ void ScriptEditor::keyPressEvent(QKeyEvent *e)
             return;
         }
 
-        UndoGroupType type = classifyChar(text.at(0));
+        QString insertText = text;
+        QString completionSuffix;
+        if (current == CharacterName || current == SceneHeading) {
+            const QString prefix = cursor.block().text().left(cursor.positionInBlock()) + text;
+            completionSuffix = resolveInlineCompletion(current, prefix);
+            if (!completionSuffix.isEmpty()) {
+                insertText += completionSuffix;
+            }
+        }
+
+        UndoGroupType type = classifyChar(insertText.at(0));
         // Words, whitespace, and punctuation can merge for natural undo groupings.
-        bool allowMerge = (type == UndoGroupType::Word ||
+        bool allowMerge = completionSuffix.isEmpty() && (type == UndoGroupType::Word ||
                    type == UndoGroupType::Whitespace ||
                    type == UndoGroupType::Punctuation);
-        qDebug() << "[ScriptEditor] Pushing InsertTextCommand: pos=" << insertPos << "text='" << text << "' type=" << (int)type << "allowMerge=" << allowMerge;
-        m_undoStack.push(new InsertTextCommand(this, insertPos, text, type, allowMerge));
+        qDebug() << "[ScriptEditor] Pushing InsertTextCommand: pos=" << insertPos << "text='" << insertText << "' type=" << (int)type << "allowMerge=" << allowMerge;
+        m_undoStack.push(new InsertTextCommand(this, insertPos, insertText, type, allowMerge));
+
+        if (!completionSuffix.isEmpty()) {
+            QTextCursor completionCursor = textCursor();
+            completionCursor.setPosition(insertPos + text.size());
+            completionCursor.setPosition(insertPos + insertText.size(), QTextCursor::KeepAnchor);
+            setTextCursor(completionCursor);
+        }
+
+        if (current == CharacterName || current == SceneHeading) {
+            const QTextCursor updatedCursor = textCursor();
+            const QString completionPrefix = updatedCursor.block().text().left(updatedCursor.positionInBlock()).toUpper();
+            showCompletionPopup(current, completionPrefix);
+        } else {
+            hideCompletionPopup();
+        }
         return;
     }
+
+    hideCompletionPopup();
 
     QTextEdit::keyPressEvent(e);
 }
@@ -260,6 +353,121 @@ double ScriptEditor::dpiX() const
 double ScriptEditor::inchToPx(double inches) const
 {
     return inches * dpiX();
+}
+
+QStringList ScriptEditor::collectCharacterNames() const
+{
+    QStringList names;
+    QSet<QString> seen;
+
+    for (QTextBlock block = document()->begin(); block.isValid(); block = block.next()) {
+        if (block.userState() != static_cast<int>(CharacterName)) {
+            continue;
+        }
+
+        const QString normalized = block.text().trimmed().toUpper();
+        if (normalized.isEmpty() || seen.contains(normalized)) {
+            continue;
+        }
+
+        seen.insert(normalized);
+        names.append(normalized);
+    }
+
+    return names;
+}
+
+QStringList ScriptEditor::sceneHeadingCompletions() const
+{
+    return {
+        "INT. ",
+        "EXT. ",
+        "INT./EXT. ",
+        "EST. ",
+        "I/E. "
+    };
+}
+
+QStringList ScriptEditor::completionCandidates(ElementType type, const QString &prefix) const
+{
+    const QString normalizedPrefix = prefix.toUpper();
+    if (normalizedPrefix.trimmed().isEmpty()) {
+        return {};
+    }
+
+    QStringList pool;
+    if (type == CharacterName) {
+        pool = collectCharacterNames();
+    } else if (type == SceneHeading) {
+        pool = sceneHeadingCompletions();
+    } else {
+        return {};
+    }
+
+    QStringList matches;
+    for (const QString &candidate : pool) {
+        if (candidate.startsWith(normalizedPrefix) && candidate != normalizedPrefix) {
+            matches.append(candidate);
+        }
+    }
+    return matches;
+}
+
+void ScriptEditor::showCompletionPopup(ElementType type, const QString &prefix)
+{
+    if (!m_completer || !m_completionModel) {
+        return;
+    }
+
+    const QStringList matches = completionCandidates(type, prefix);
+    if (matches.size() <= 1) {
+        hideCompletionPopup();
+        return;
+    }
+
+    m_completionType = type;
+    m_completionPrefix = prefix.toUpper();
+    m_completionModel->setStringList(matches);
+
+    QRect popupRect = cursorRect();
+    popupRect.setWidth(220);
+    m_completer->complete(popupRect);
+}
+
+void ScriptEditor::hideCompletionPopup()
+{
+    if (m_completer) {
+        m_completer->popup()->hide();
+    }
+    m_completionPrefix.clear();
+}
+
+void ScriptEditor::insertChosenCompletion(const QString &completion)
+{
+    if (m_completionPrefix.isEmpty() || !completion.startsWith(m_completionPrefix)) {
+        return;
+    }
+
+    const QString suffix = completion.mid(m_completionPrefix.size());
+    if (suffix.isEmpty()) {
+        hideCompletionPopup();
+        return;
+    }
+
+    const int insertPos = textCursor().position();
+    m_undoStack.push(new InsertTextCommand(this, insertPos, suffix, UndoGroupType::Bulk, false));
+    hideCompletionPopup();
+}
+
+QString ScriptEditor::resolveInlineCompletion(ElementType type, const QString &prefix) const
+{
+    const QStringList matches = completionCandidates(type, prefix);
+    if (matches.size() != 1) {
+        return QString();
+    }
+
+    const QString normalizedPrefix = prefix.toUpper();
+    return matches.first().mid(normalizedPrefix.size());
 }
 
 ScriptEditor::ElementType ScriptEditor::nextType(ElementType t) const

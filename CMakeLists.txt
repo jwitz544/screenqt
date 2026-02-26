@@ -42,6 +42,8 @@ add_executable(screenqt
     include/elementtypepanel.h
     src/outlinepanel.cpp
     include/outlinepanel.h
+    src/characterspanel.cpp
+    include/characterspanel.h
 )
 
 target_include_directories(screenqt PRIVATE

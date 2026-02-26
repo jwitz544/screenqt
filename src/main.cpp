@@ -15,11 +15,204 @@
 #include <QDockWidget>
 #include <QList>
 #include <QSettings>
+#include <QFont>
+#include <QFontInfo>
 #include "pageview.h"
 #include "scripteditor.h"
 #include "startscreen.h"
 #include "elementtypepanel.h"
 #include "outlinepanel.h"
+#include "characterspanel.h"
+
+namespace UiSpacing {
+constexpr int GridUnit = 8;
+constexpr int PanelPadding = 12;
+constexpr int PanelPaddingLarge = 16;
+constexpr int ItemVerticalSpacing = 8;
+constexpr int SidebarWidth = 240;
+}
+
+namespace UiColors {
+constexpr auto MainBackground = "#1B1D21";
+constexpr auto SidebarBackground = "#15171B";
+constexpr auto SurfaceBackground = "#1F232B";
+constexpr auto HoverBackground = "#272C35";
+constexpr auto ActiveBackground = "#2A3240";
+constexpr auto Accent = "#7396D8";
+constexpr auto TextPrimary = "#C9D1DD";
+constexpr auto TextMuted = "#93A0B6";
+constexpr auto MenuBackground = "#1D2026";
+constexpr auto MenuPopupBackground = "#22262D";
+constexpr auto ScrollThumb = "#475061";
+}
+
+QString buildAppStyleSheet()
+{
+    return QStringLiteral(
+        "QMainWindow { background: %1; color: %2; }"
+        "QWidget { color: %2; font-size: 12px; }"
+        "QMainWindow::separator { background: #1F232B; width: 2px; height: 2px; }"
+        "QMenuBar {"
+        "  background: %3;"
+        "  padding: 1px 8px;"
+        "  min-height: 24px;"
+        "}"
+        "QMenuBar::item {"
+        "  spacing: 8px;"
+        "  padding: 4px 8px;"
+        "  color: %2;"
+        "  border-radius: 4px;"
+        "  font-size: 12px;"
+        "  font-weight: 500;"
+        "}"
+        "QMenuBar::item:selected { background: %4; }"
+        "QMenu {"
+        "  background: %5;"
+        "  padding: 2px;"
+        "}"
+        "QMenu::item {"
+        "  padding: 5px 14px;"
+        "  border-radius: 4px;"
+        "  font-size: 12px;"
+        "}"
+        "QMenu::item:selected { background: %4; }"
+        "QMainWindow QTabBar::tab {"
+        "  background: %5;"
+        "  color: %7;"
+        "  padding: 3px 8px;"
+        "  margin-right: 2px;"
+        "  border: none;"
+        "  border-radius: 4px;"
+        "  font-size: 10px;"
+        "  font-weight: 500;"
+        "}"
+        "QMainWindow QTabBar::tab:selected {"
+        "  background: %8;"
+        "  color: %2;"
+        "  font-weight: 600;"
+        "}"
+        "QMainWindow QTabBar::tab:hover { background: %4; color: %2; }"
+        "QDockWidget {"
+        "  background: %6;"
+        "  font-size: 12px;"
+        "  titlebar-close-icon: none;"
+        "  titlebar-normal-icon: none;"
+        "}"
+        "QDockWidget::title {"
+        "  background: %6;"
+        "  color: %7;"
+        "  padding: 4px 10px 3px 10px;"
+        "  text-align: left;"
+        "  border: none;"
+        "  font-size: 10px;"
+        "  font-weight: 600;"
+        "}"
+        "QDockWidget > QWidget { background: %6; }"
+        "QWidget#elementTypePanel, QWidget#outlinePanel, QWidget#charactersPanel { background: %6; }"
+        "QLabel#panelTitle {"
+        "  color: %2;"
+        "  font-size: 11px;"
+        "  font-weight: 600;"
+        "}"
+        "QLabel#panelMeta {"
+        "  color: %7;"
+        "  font-size: 9px;"
+        "  font-weight: 500;"
+        "}"
+        "QFrame#panelGroup {"
+        "  background: %8;"
+        "  border-radius: 8px;"
+        "}"
+        "QPushButton#sidebarItem {"
+        "  background: transparent;"
+        "  color: %2;"
+        "  text-align: left;"
+        "  padding: 5px 8px;"
+        "  border: none;"
+        "  border-left: 2px solid transparent;"
+        "  font-size: 11px;"
+        "  font-weight: 500;"
+        "}"
+        "QPushButton#sidebarItem:hover { background: %4; }"
+        "QPushButton#sidebarItem:checked {"
+        "  background: %9;"
+        "  border-left: 2px solid %10;"
+        "  font-weight: 600;"
+        "}"
+        "QListWidget#sceneList {"
+        "  background: transparent;"
+        "  border: none;"
+        "  outline: none;"
+        "  padding: 1px;"
+        "}"
+        "QListWidget#sceneList::item {"
+        "  padding: 5px 8px;"
+        "  border-left: 2px solid transparent;"
+        "  border-radius: 6px;"
+        "  color: %2;"
+        "  font-size: 11px;"
+        "  font-weight: 500;"
+        "}"
+        "QListWidget#sceneList::item:hover { background: %4; }"
+        "QListWidget#sceneList::item:selected {"
+        "  background: %9;"
+        "  border-left: 2px solid %10;"
+        "  font-weight: 600;"
+        "}"
+        "QScrollArea#editorScrollArea { background: %1; border: none; }"
+        "QScrollArea#editorScrollArea > QWidget > QWidget { background: transparent; }"
+        "QScrollBar:vertical { background: transparent; width: 8px; margin: 1px; }"
+        "QScrollBar::handle:vertical { background: %11; border-radius: 5px; min-height: 24px; }"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
+        "QAbstractItemView#scriptEditorCompleterPopup {"
+        "  background: %5;"
+        "  color: %2;"
+        "  border: 1px solid #303846;"
+        "  border-radius: 6px;"
+        "  padding: 2px;"
+        "  outline: none;"
+        "  font-size: 11px;"
+        "}"
+        "QAbstractItemView#scriptEditorCompleterPopup::item {"
+        "  padding: 4px 6px;"
+        "  border-radius: 4px;"
+        "}"
+        "QAbstractItemView#scriptEditorCompleterPopup::item:hover { background: %4; }"
+        "QAbstractItemView#scriptEditorCompleterPopup::item:selected {"
+        "  background: %9;"
+        "  color: %2;"
+        "}"
+        "QTextEdit#scriptEditor {"
+        "  color: #1E2127;"
+        "  background: transparent;"
+        "  border: none;"
+        "}"
+        "QTextEdit { selection-background-color: #7B93C4; selection-color: #101319; }"
+        "QWidget#startScreen { background: %1; }"
+        "QLabel#startTitle { color: %2; font-size: 32px; font-weight: 700; }"
+        "QPushButton#startPrimaryButton, QPushButton#startSecondaryButton {"
+        "  padding: 9px 14px;"
+        "  border-radius: 6px;"
+        "  background: %8;"
+        "  color: %2;"
+        "  font-size: 14px;"
+        "  font-weight: 500;"
+        "}"
+        "QPushButton#startPrimaryButton:hover, QPushButton#startSecondaryButton:hover { background: %4; }"
+        "QPushButton:disabled { color: %7; }"
+    )
+        .arg(UiColors::MainBackground)
+        .arg(UiColors::TextPrimary)
+        .arg(UiColors::MenuBackground)
+        .arg(UiColors::HoverBackground)
+        .arg(UiColors::MenuPopupBackground)
+        .arg(UiColors::SidebarBackground)
+        .arg(UiColors::TextMuted)
+        .arg(UiColors::SurfaceBackground)
+        .arg(UiColors::ActiveBackground)
+        .arg(UiColors::Accent)
+        .arg(UiColors::ScrollThumb);
+}
 
 // Custom message handler to add timestamps
 void customMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
@@ -55,48 +248,19 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
     qDebug() << "[Main] Application started";
 
+    QFont appFont("Segoe UI");
+    if (!QFontInfo(appFont).family().contains("Segoe UI", Qt::CaseInsensitive)) {
+        appFont = QApplication::font();
+    }
+    appFont.setPointSize(9);
+    appFont.setStyleStrategy(QFont::PreferAntialias);
+    app.setFont(appFont);
+
     QMainWindow window;
     window.setWindowTitle("ScreenQt");
     window.resize(900, 700);
     window.setDockOptions(QMainWindow::AnimatedDocks | QMainWindow::AllowNestedDocks | QMainWindow::GroupedDragging);
-    window.setStyleSheet(
-        "QMainWindow { background: #eef1f5; }"
-        "QMenuBar {"
-        "  background: #f8fafc;"
-        "  border-bottom: 1px solid #d9dee6;"
-        "  padding: 2px 6px;"
-        "}"
-        "QMenuBar::item {"
-        "  spacing: 8px;"
-        "  padding: 6px 10px;"
-        "  border-radius: 6px;"
-        "  color: #1f2937;"
-        "}"
-        "QMenuBar::item:selected { background: #e8eef8; }"
-        "QMenu {"
-        "  background: #ffffff;"
-        "  border: 1px solid #d0d7de;"
-        "  padding: 6px;"
-        "}"
-        "QMenu::item {"
-        "  padding: 6px 24px;"
-        "  border-radius: 6px;"
-        "}"
-        "QMenu::item:selected { background: #e8eef8; }"
-        "QDockWidget {"
-        "  font-size: 12px;"
-        "  titlebar-close-icon: none;"
-        "  titlebar-normal-icon: none;"
-        "}"
-        "QDockWidget::title {"
-        "  background: #f8fafc;"
-        "  border: 1px solid #d0d7de;"
-        "  border-bottom: none;"
-        "  color: #374151;"
-        "  padding: 6px 10px;"
-        "  text-align: left;"
-        "}"
-    );
+    window.setStyleSheet(buildAppStyleSheet());
     qDebug() << "[Main] Window created and resized to 900x700";
 
     QSettings settings("ScreenQt", "ScreenQt");
@@ -168,6 +332,7 @@ int main(int argc, char *argv[])
     // Right-side draggable panel blocks
     ElementTypePanel *typePanel = new ElementTypePanel();
     OutlinePanel *outlinePanel = new OutlinePanel();
+    CharactersPanel *charactersPanel = new CharactersPanel();
 
     QDockWidget *elementDock = new QDockWidget("Elements", &window);
     elementDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
@@ -177,12 +342,23 @@ int main(int argc, char *argv[])
     outlineDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
     outlineDock->setWidget(outlinePanel);
 
+    QDockWidget *charactersDock = new QDockWidget("Characters", &window);
+    charactersDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+    charactersDock->setWidget(charactersPanel);
+
     window.addDockWidget(Qt::RightDockWidgetArea, elementDock);
     window.addDockWidget(Qt::RightDockWidgetArea, outlineDock);
+    window.addDockWidget(Qt::RightDockWidgetArea, charactersDock);
     window.splitDockWidget(elementDock, outlineDock, Qt::Vertical);
+    window.tabifyDockWidget(outlineDock, charactersDock);
+    outlineDock->raise();
 
-    elementDock->setMinimumWidth(150);
-    outlineDock->setMinimumWidth(150);
+    elementDock->setMinimumWidth(UiSpacing::SidebarWidth);
+    elementDock->setMaximumWidth(UiSpacing::SidebarWidth);
+    outlineDock->setMinimumWidth(UiSpacing::SidebarWidth);
+    outlineDock->setMaximumWidth(UiSpacing::SidebarWidth);
+    charactersDock->setMinimumWidth(UiSpacing::SidebarWidth);
+    charactersDock->setMaximumWidth(UiSpacing::SidebarWidth);
 
     const QByteArray savedGeometry = settings.value("window/geometry").toByteArray();
     if (!savedGeometry.isEmpty()) {
@@ -196,31 +372,43 @@ int main(int argc, char *argv[])
 
     elementDock->hide();
     outlineDock->hide();
+    charactersDock->hide();
 
-    auto applyDefaultPanelLayout = [&window, elementDock, outlineDock]() {
+    auto applyBalancedSidebarSplit = [&window, elementDock, outlineDock]() {
+        QList<QDockWidget*> docks{elementDock, outlineDock};
+        const int half = qMax(1, window.height() / 2);
+        QList<int> sizes{half, half};
+        window.resizeDocks(docks, sizes, Qt::Vertical);
+    };
+
+    auto applyDefaultPanelLayout = [&window, elementDock, outlineDock, charactersDock, applyBalancedSidebarSplit]() {
         if (elementDock->isFloating()) {
             elementDock->setFloating(false);
         }
         if (outlineDock->isFloating()) {
             outlineDock->setFloating(false);
         }
+        if (charactersDock->isFloating()) {
+            charactersDock->setFloating(false);
+        }
 
         window.addDockWidget(Qt::RightDockWidgetArea, elementDock);
         window.addDockWidget(Qt::RightDockWidgetArea, outlineDock);
+        window.addDockWidget(Qt::RightDockWidgetArea, charactersDock);
         window.splitDockWidget(elementDock, outlineDock, Qt::Vertical);
-
-        QList<QDockWidget*> docks{elementDock, outlineDock};
-        QList<int> sizes{1, 1};
-        window.resizeDocks(docks, sizes, Qt::Vertical);
+        window.tabifyDockWidget(outlineDock, charactersDock);
+        outlineDock->raise();
+        applyBalancedSidebarSplit();
 
         elementDock->show();
         outlineDock->show();
+        charactersDock->show();
     };
     
     // Function to create page view with scroll area
     QString currentFilePath;
     
-    auto createPageView = [&window, stack, &currentPage, &currentFilePath, &persistedZoomSteps, saveAction, saveAsAction, exportFdxAction, exportPdfAction, undoAction, redoAction, zoomInAction, zoomOutAction, resetZoomAction, typePanel, outlinePanel, elementDock, outlineDock]() -> PageView* {
+    auto createPageView = [&window, stack, &currentPage, &currentFilePath, &persistedZoomSteps, saveAction, saveAsAction, exportFdxAction, exportPdfAction, undoAction, redoAction, zoomInAction, zoomOutAction, resetZoomAction, typePanel, outlinePanel, charactersPanel, elementDock, outlineDock, charactersDock, applyBalancedSidebarSplit]() -> PageView* {
         PageView *page = new PageView();
         currentPage = page;
         currentFilePath.clear();
@@ -228,6 +416,7 @@ int main(int argc, char *argv[])
         page->setZoomSteps(persistedZoomSteps);
         
         QScrollArea *scroll = new QScrollArea();
+        scroll->setObjectName("editorScrollArea");
         scroll->setWidget(page);
         scroll->setWidgetResizable(true);
         scroll->setBackgroundRole(QPalette::Dark);
@@ -235,6 +424,7 @@ int main(int argc, char *argv[])
         
         typePanel->setPageView(page);
         outlinePanel->setEditor(page->editor());
+        charactersPanel->setEditor(page->editor());
         
         // Create container widget for editor + panel
         QWidget *editorContainer = new QWidget();
@@ -281,6 +471,10 @@ int main(int argc, char *argv[])
         resetZoomAction->setEnabled(true);
         elementDock->show();
         outlineDock->show();
+        charactersDock->show();
+        window.tabifyDockWidget(outlineDock, charactersDock);
+        outlineDock->raise();
+        applyBalancedSidebarSplit();
         qDebug() << "[Main] Before setting initial undo/redo state: isUndoAvailable=" << page->editor()->document()->isUndoAvailable() << "isRedoAvailable=" << page->editor()->document()->isRedoAvailable();
         undoAction->setEnabled(page->editor()->document()->isUndoAvailable());
         redoAction->setEnabled(page->editor()->document()->isRedoAvailable());
