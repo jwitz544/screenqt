@@ -22,16 +22,11 @@ CharactersPanel::CharactersPanel(QWidget *parent)
     setObjectName("charactersPanel");
     setMinimumHeight(90);
     setMinimumWidth(240);
-    setMaximumWidth(240);
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(10, 8, 10, 8);
     layout->setSpacing(6);
-
-    auto *title = new QLabel("Characters", this);
-    title->setObjectName("panelTitle");
-    layout->addWidget(title);
 
     m_characterCountLabel = new QLabel("0 characters", this);
     m_characterCountLabel->setObjectName("panelMeta");
@@ -45,7 +40,8 @@ CharactersPanel::CharactersPanel(QWidget *parent)
 
     m_characterList = new QListWidget(listCard);
     m_characterList->setObjectName("sceneList");
-    m_characterList->setSpacing(2);
+    m_characterList->setSpacing(0);
+    m_characterList->setUniformItemSizes(true);
     cardLayout->addWidget(m_characterList, 1);
     layout->addWidget(listCard, 1);
 
@@ -98,6 +94,7 @@ void CharactersPanel::refreshCharacters()
     for (auto it = characters.cbegin(); it != characters.cend(); ++it) {
         auto *item = new QListWidgetItem(it.key(), m_characterList);
         item->setData(CharacterPositionRole, it.value());
+        item->setSizeHint(QSize(item->sizeHint().width(), 26));
     }
 
     const int characterCount = characters.size();
@@ -107,6 +104,7 @@ void CharactersPanel::refreshCharacters()
         auto *emptyItem = new QListWidgetItem("No characters yet", m_characterList);
         emptyItem->setFlags(emptyItem->flags() & ~Qt::ItemIsSelectable);
         emptyItem->setForeground(QColor("#7f8ca3"));
+        emptyItem->setSizeHint(QSize(emptyItem->sizeHint().width(), 24));
     }
 }
 

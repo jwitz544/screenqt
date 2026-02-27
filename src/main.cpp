@@ -11,14 +11,17 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QHBoxLayout>
+#include <QVBoxLayout>
 #include <QDateTime>
 #include <QDockWidget>
 #include <QList>
 #include <QSettings>
 #include <QFont>
 #include <QFontInfo>
+#include <QTabBar>
 #include "pageview.h"
 #include "scripteditor.h"
+#include "findbar.h"
 #include "startscreen.h"
 #include "elementtypepanel.h"
 #include "outlinepanel.h"
@@ -29,7 +32,11 @@ constexpr int GridUnit = 8;
 constexpr int PanelPadding = 12;
 constexpr int PanelPaddingLarge = 16;
 constexpr int ItemVerticalSpacing = 8;
-constexpr int SidebarWidth = 240;
+constexpr int SidebarWidth = 320;
+constexpr int SidebarMinWidth = 220;
+constexpr int SidebarMaxWidth = 560;
+constexpr int CompactItemPaddingV = 5;
+constexpr int CompactItemPaddingH = 8;
 }
 
 namespace UiColors {
@@ -50,16 +57,16 @@ QString buildAppStyleSheet()
 {
     return QStringLiteral(
         "QMainWindow { background: %1; color: %2; }"
-        "QWidget { color: %2; font-size: 12px; }"
+        "QWidget { color: %2; }"
         "QMainWindow::separator { background: #1F232B; width: 2px; height: 2px; }"
         "QMenuBar {"
         "  background: %3;"
-        "  padding: 1px 8px;"
-        "  min-height: 24px;"
+        "  padding: 0px 6px;"
+        "  min-height: 20px;"
         "}"
         "QMenuBar::item {"
         "  spacing: 8px;"
-        "  padding: 4px 8px;"
+        "  padding: %12px %13px;"
         "  color: %2;"
         "  border-radius: 4px;"
         "  font-size: 12px;"
@@ -71,7 +78,7 @@ QString buildAppStyleSheet()
         "  padding: 2px;"
         "}"
         "QMenu::item {"
-        "  padding: 5px 14px;"
+        "  padding: %12px %13px;"
         "  border-radius: 4px;"
         "  font-size: 12px;"
         "}"
@@ -79,7 +86,7 @@ QString buildAppStyleSheet()
         "QMainWindow QTabBar::tab {"
         "  background: %5;"
         "  color: %7;"
-        "  padding: 3px 8px;"
+        "  padding: 2px 6px;"
         "  margin-right: 2px;"
         "  border: none;"
         "  border-radius: 4px;"
@@ -101,7 +108,7 @@ QString buildAppStyleSheet()
         "QDockWidget::title {"
         "  background: %6;"
         "  color: %7;"
-        "  padding: 4px 10px 3px 10px;"
+        "  padding: 3px 8px 2px 8px;"
         "  text-align: left;"
         "  border: none;"
         "  font-size: 10px;"
@@ -127,7 +134,7 @@ QString buildAppStyleSheet()
         "  background: transparent;"
         "  color: %2;"
         "  text-align: left;"
-        "  padding: 5px 8px;"
+        "  padding: %12px %13px;"
         "  border: none;"
         "  border-left: 2px solid transparent;"
         "  font-size: 11px;"
@@ -146,7 +153,7 @@ QString buildAppStyleSheet()
         "  padding: 1px;"
         "}"
         "QListWidget#sceneList::item {"
-        "  padding: 5px 8px;"
+        "  padding: %12px %13px;"
         "  border-left: 2px solid transparent;"
         "  border-radius: 6px;"
         "  color: %2;"
@@ -174,7 +181,7 @@ QString buildAppStyleSheet()
         "  font-size: 11px;"
         "}"
         "QAbstractItemView#scriptEditorCompleterPopup::item {"
-        "  padding: 4px 6px;"
+        "  padding: %12px %13px;"
         "  border-radius: 4px;"
         "}"
         "QAbstractItemView#scriptEditorCompleterPopup::item:hover { background: %4; }"
@@ -188,6 +195,27 @@ QString buildAppStyleSheet()
         "  border: none;"
         "}"
         "QTextEdit { selection-background-color: #7B93C4; selection-color: #101319; }"
+        "QFrame#findBar {"
+        "  background: %5;"
+        "  border-bottom: 1px solid #303846;"
+        "}"
+        "QFrame#findBar QLabel { color: %7; font-size: 11px; font-weight: 600; }"
+        "QFrame#findBar QLineEdit {"
+        "  background: %8;"
+        "  border: 1px solid #303846;"
+        "  border-radius: 4px;"
+        "  padding: 4px 6px;"
+        "  color: %2;"
+        "}"
+        "QFrame#findBar QPushButton, QFrame#findBar QCheckBox {"
+        "  background: %8;"
+        "  color: %2;"
+        "  border: 1px solid #303846;"
+        "  border-radius: 4px;"
+        "  padding: 3px 6px;"
+        "  font-size: 10px;"
+        "}"
+        "QFrame#findBar QPushButton:hover, QFrame#findBar QCheckBox:hover { background: %4; }"
         "QWidget#startScreen { background: %1; }"
         "QLabel#startTitle { color: %2; font-size: 32px; font-weight: 700; }"
         "QPushButton#startPrimaryButton, QPushButton#startSecondaryButton {"
@@ -211,7 +239,9 @@ QString buildAppStyleSheet()
         .arg(UiColors::SurfaceBackground)
         .arg(UiColors::ActiveBackground)
         .arg(UiColors::Accent)
-        .arg(UiColors::ScrollThumb);
+        .arg(UiColors::ScrollThumb)
+        .arg(UiSpacing::CompactItemPaddingV)
+        .arg(UiSpacing::CompactItemPaddingH);
 }
 
 // Custom message handler to add timestamps
@@ -265,7 +295,16 @@ int main(int argc, char *argv[])
 
     QSettings settings("ScreenQt", "ScreenQt");
     constexpr int layoutStateVersion = 1;
+    constexpr int defaultScreenplayZoomSteps = 2;
+    constexpr int zoomCalibrationRevision = 1;
+
     int persistedZoomSteps = settings.value("editor/zoomSteps", 0).toInt();
+    const int storedZoomCalibrationRevision = settings.value("editor/zoomCalibrationRevision", 0).toInt();
+    if (storedZoomCalibrationRevision < zoomCalibrationRevision && persistedZoomSteps == 0) {
+        persistedZoomSteps = defaultScreenplayZoomSteps;
+        settings.setValue("editor/zoomSteps", persistedZoomSteps);
+    }
+    settings.setValue("editor/zoomCalibrationRevision", zoomCalibrationRevision);
 
     // Create stacked widget to switch between start screen and editor
     QStackedWidget *stack = new QStackedWidget(&window);
@@ -273,6 +312,7 @@ int main(int argc, char *argv[])
     
     // Pointer to current page (for save functionality)
     PageView *currentPage = nullptr;
+    FindBar *currentFindBar = nullptr;
     
     // Create menu bar
     QMenuBar *menuBar = window.menuBar();
@@ -310,6 +350,25 @@ int main(int argc, char *argv[])
     redoAction->setShortcut(QKeySequence::Redo);
     redoAction->setEnabled(false);
 
+    editMenu->addSeparator();
+    QAction *findAction = editMenu->addAction("&Find...");
+    findAction->setShortcut(QKeySequence::Find);
+    findAction->setEnabled(false);
+
+    QAction *findNextAction = editMenu->addAction("Find &Next");
+    findNextAction->setShortcut(QKeySequence::FindNext);
+    findNextAction->setEnabled(false);
+
+    QAction *findPreviousAction = editMenu->addAction("Find &Previous");
+    findPreviousAction->setShortcut(QKeySequence::FindPrevious);
+    findPreviousAction->setEnabled(false);
+
+    editMenu->addSeparator();
+    QAction *spellcheckAction = editMenu->addAction("&Spellcheck");
+    spellcheckAction->setCheckable(true);
+    spellcheckAction->setChecked(true);
+    spellcheckAction->setEnabled(false);
+
     QMenu *viewMenu = menuBar->addMenu("&View");
     QAction *zoomInAction = viewMenu->addAction("Zoom &In");
     zoomInAction->setShortcut(QKeySequence::ZoomIn);
@@ -346,6 +405,15 @@ int main(int argc, char *argv[])
     charactersDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
     charactersDock->setWidget(charactersPanel);
 
+    auto normalizeDockTabBars = [&window]() {
+        const auto tabBars = window.findChildren<QTabBar*>();
+        for (QTabBar *tabBar : tabBars) {
+            tabBar->setElideMode(Qt::ElideNone);
+            tabBar->setUsesScrollButtons(false);
+            tabBar->setExpanding(true);
+        }
+    };
+
     window.addDockWidget(Qt::RightDockWidgetArea, elementDock);
     window.addDockWidget(Qt::RightDockWidgetArea, outlineDock);
     window.addDockWidget(Qt::RightDockWidgetArea, charactersDock);
@@ -353,12 +421,12 @@ int main(int argc, char *argv[])
     window.tabifyDockWidget(outlineDock, charactersDock);
     outlineDock->raise();
 
-    elementDock->setMinimumWidth(UiSpacing::SidebarWidth);
-    elementDock->setMaximumWidth(UiSpacing::SidebarWidth);
-    outlineDock->setMinimumWidth(UiSpacing::SidebarWidth);
-    outlineDock->setMaximumWidth(UiSpacing::SidebarWidth);
-    charactersDock->setMinimumWidth(UiSpacing::SidebarWidth);
-    charactersDock->setMaximumWidth(UiSpacing::SidebarWidth);
+    elementDock->setMinimumWidth(UiSpacing::SidebarMinWidth);
+    elementDock->setMaximumWidth(UiSpacing::SidebarMaxWidth);
+    outlineDock->setMinimumWidth(UiSpacing::SidebarMinWidth);
+    outlineDock->setMaximumWidth(UiSpacing::SidebarMaxWidth);
+    charactersDock->setMinimumWidth(UiSpacing::SidebarMinWidth);
+    charactersDock->setMaximumWidth(UiSpacing::SidebarMaxWidth);
 
     const QByteArray savedGeometry = settings.value("window/geometry").toByteArray();
     if (!savedGeometry.isEmpty()) {
@@ -369,6 +437,7 @@ int main(int argc, char *argv[])
     if (!savedState.isEmpty()) {
         window.restoreState(savedState, layoutStateVersion);
     }
+    normalizeDockTabBars();
 
     elementDock->hide();
     outlineDock->hide();
@@ -381,7 +450,13 @@ int main(int argc, char *argv[])
         window.resizeDocks(docks, sizes, Qt::Vertical);
     };
 
-    auto applyDefaultPanelLayout = [&window, elementDock, outlineDock, charactersDock, applyBalancedSidebarSplit]() {
+    auto applySidebarDefaultWidth = [&window, elementDock, outlineDock, charactersDock]() {
+        QList<QDockWidget*> docks{elementDock, outlineDock, charactersDock};
+        QList<int> sizes{UiSpacing::SidebarWidth, UiSpacing::SidebarWidth, UiSpacing::SidebarWidth};
+        window.resizeDocks(docks, sizes, Qt::Horizontal);
+    };
+
+    auto applyDefaultPanelLayout = [&window, elementDock, outlineDock, charactersDock, applyBalancedSidebarSplit, applySidebarDefaultWidth]() {
         if (elementDock->isFloating()) {
             elementDock->setFloating(false);
         }
@@ -398,6 +473,13 @@ int main(int argc, char *argv[])
         window.splitDockWidget(elementDock, outlineDock, Qt::Vertical);
         window.tabifyDockWidget(outlineDock, charactersDock);
         outlineDock->raise();
+        const auto tabBars = window.findChildren<QTabBar*>();
+        for (QTabBar *tabBar : tabBars) {
+            tabBar->setElideMode(Qt::ElideNone);
+            tabBar->setUsesScrollButtons(false);
+            tabBar->setExpanding(true);
+        }
+        applySidebarDefaultWidth();
         applyBalancedSidebarSplit();
 
         elementDock->show();
@@ -408,7 +490,7 @@ int main(int argc, char *argv[])
     // Function to create page view with scroll area
     QString currentFilePath;
     
-    auto createPageView = [&window, stack, &currentPage, &currentFilePath, &persistedZoomSteps, saveAction, saveAsAction, exportFdxAction, exportPdfAction, undoAction, redoAction, zoomInAction, zoomOutAction, resetZoomAction, typePanel, outlinePanel, charactersPanel, elementDock, outlineDock, charactersDock, applyBalancedSidebarSplit]() -> PageView* {
+    auto createPageView = [&window, stack, &currentPage, &currentFindBar, &currentFilePath, &persistedZoomSteps, saveAction, saveAsAction, exportFdxAction, exportPdfAction, undoAction, redoAction, findAction, findNextAction, findPreviousAction, spellcheckAction, zoomInAction, zoomOutAction, resetZoomAction, typePanel, outlinePanel, charactersPanel, elementDock, outlineDock, charactersDock, applyBalancedSidebarSplit, applySidebarDefaultWidth, normalizeDockTabBars]() -> PageView* {
         PageView *page = new PageView();
         currentPage = page;
         currentFilePath.clear();
@@ -428,10 +510,15 @@ int main(int argc, char *argv[])
         
         // Create container widget for editor + panel
         QWidget *editorContainer = new QWidget();
-        QHBoxLayout *containerLayout = new QHBoxLayout(editorContainer);
+        QVBoxLayout *containerLayout = new QVBoxLayout(editorContainer);
         containerLayout->setContentsMargins(0, 0, 0, 0);
         containerLayout->setSpacing(0);
+
+        FindBar *findBar = new FindBar(editorContainer);
+        findBar->hide();
+        containerLayout->addWidget(findBar, 0);
         containerLayout->addWidget(scroll, 1);
+        currentFindBar = findBar;
         
         stack->addWidget(editorContainer);
         
@@ -466,6 +553,11 @@ int main(int argc, char *argv[])
         saveAsAction->setEnabled(true);
         exportFdxAction->setEnabled(true);
         exportPdfAction->setEnabled(true);
+        findAction->setEnabled(true);
+        findNextAction->setEnabled(true);
+        findPreviousAction->setEnabled(true);
+        spellcheckAction->setEnabled(true);
+        spellcheckAction->setChecked(page->editor()->spellcheckEnabled());
         zoomInAction->setEnabled(true);
         zoomOutAction->setEnabled(true);
         resetZoomAction->setEnabled(true);
@@ -474,15 +566,59 @@ int main(int argc, char *argv[])
         charactersDock->show();
         window.tabifyDockWidget(outlineDock, charactersDock);
         outlineDock->raise();
+        normalizeDockTabBars();
+        applySidebarDefaultWidth();
         applyBalancedSidebarSplit();
         qDebug() << "[Main] Before setting initial undo/redo state: isUndoAvailable=" << page->editor()->document()->isUndoAvailable() << "isRedoAvailable=" << page->editor()->document()->isRedoAvailable();
         undoAction->setEnabled(page->editor()->document()->isUndoAvailable());
         redoAction->setEnabled(page->editor()->document()->isRedoAvailable());
         qDebug() << "[Main] After setting initial undo/redo state: undoAction enabled=" << undoAction->isEnabled() << "redoAction enabled=" << redoAction->isEnabled();
         qDebug() << "[Main] Switched to editor view";
+
+        QObject::connect(findBar, &FindBar::queryChanged, page->editor(), &ScriptEditor::setFindQuery);
+        QObject::connect(findBar, &FindBar::optionsChanged, page->editor(), &ScriptEditor::setFindOptions);
+        QObject::connect(findBar, &FindBar::findNextRequested, page->editor(), &ScriptEditor::findNext);
+        QObject::connect(findBar, &FindBar::findPreviousRequested, page->editor(), &ScriptEditor::findPrevious);
+        QObject::connect(findBar, &FindBar::closeRequested, [findBar, editor = page->editor()]() {
+            findBar->hide();
+            editor->setFocus();
+        });
+
+        QObject::connect(page->editor(), &ScriptEditor::findResultsChanged, findBar, [findBar](int activeIndex, int totalMatches) {
+            findBar->setMatchStatus(activeIndex, totalMatches);
+        });
         
         return page;
     };
+
+    QObject::connect(findAction, &QAction::triggered, [&]() {
+        if (!currentPage || !currentFindBar) {
+            return;
+        }
+        currentFindBar->show();
+        currentFindBar->focusAndSelectAll();
+    });
+
+    QObject::connect(findNextAction, &QAction::triggered, [&]() {
+        if (!currentPage) {
+            return;
+        }
+        currentPage->editor()->findNext();
+    });
+
+    QObject::connect(findPreviousAction, &QAction::triggered, [&]() {
+        if (!currentPage) {
+            return;
+        }
+        currentPage->editor()->findPrevious();
+    });
+
+    QObject::connect(spellcheckAction, &QAction::toggled, [&](bool enabled) {
+        if (!currentPage) {
+            return;
+        }
+        currentPage->editor()->setSpellcheckEnabled(enabled);
+    });
     
     // Connect start screen signals
     QObject::connect(startScreen, &StartScreen::newDocument, [&]() {

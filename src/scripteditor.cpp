@@ -1,8 +1,10 @@
 #include "scripteditor.h"
+#include "spellcheckservice.h"
 #include <QTextCursor>
 #include <QTextBlock>
 #include <QTextBlockFormat>
 #include <QTextCharFormat>
+#include <QTextDocument>
 #include <QKeyEvent>
 #include <QScrollBar>
 #include <QDebug>
@@ -16,7 +18,11 @@
 #include <QStringListModel>
 #include <QAbstractItemView>
 #include <QApplication>
-#include <QSet>
+#include <QFontDatabase>
+#include <QFontInfo>
+#include <QContextMenuEvent>
+#include <QMenu>
+#include <QTimer>
 #include "scripteditor_undo.h"
 
 using ScriptEditorUndo::CompoundCommand;
@@ -30,9 +36,25 @@ ScriptEditor::ScriptEditor(QWidget *parent)
 {
     setObjectName("scriptEditor");
 
-    // Basic screenplay font
-    QFont f("Courier New");
-    f.setPointSizeF(15.0);
+    // Screenplay font baseline: 12 pt, preferring production screenplay faces.
+    QString chosenFamily = "Courier New";
+    const QStringList preferredFamilies = {
+        "Courier Final Draft",
+        "Courier Prime",
+        "Courier Screenplay",
+        "Courier New"
+    };
+    const QStringList availableFamilies = QFontDatabase().families();
+    for (const QString &candidate : preferredFamilies) {
+        if (availableFamilies.contains(candidate)) {
+            chosenFamily = candidate;
+            break;
+        }
+    }
+
+    QFont f(chosenFamily);
+    f.setPointSizeF(12.0);
+    f.setFixedPitch(true);
     f.setStyleHint(QFont::TypeWriter);
     setFont(f);
 
@@ -62,12 +84,12 @@ ScriptEditor::ScriptEditor(QWidget *parent)
         "  color: #C9D1DD;"
         "  border: 1px solid #303846;"
         "  border-radius: 6px;"
-        "  padding: 4px;"
+        "  padding: 2px;"
         "  outline: none;"
-        "  font-size: 12px;"
+        "  font-size: 11px;"
         "}"
         "QAbstractItemView#scriptEditorCompleterPopup::item {"
-        "  padding: 6px 8px;"
+        "  padding: 5px 8px;"
         "  border-radius: 4px;"
         "}"
         "QAbstractItemView#scriptEditorCompleterPopup::item:hover { background: #272C35; }"
@@ -96,6 +118,19 @@ ScriptEditor::ScriptEditor(QWidget *parent)
     connect(this, &QTextEdit::undoAvailable, [](bool avail){
         qDebug() << "Undo available:" << avail;
     });
+
+    m_spellChecker = std::make_unique<BasicSpellChecker>();
+    m_spellcheckTimer = new QTimer(this);
+    m_spellcheckTimer->setSingleShot(true);
+    m_spellcheckTimer->setInterval(250);
+    connect(m_spellcheckTimer, &QTimer::timeout, this, &ScriptEditor::refreshSpellcheck);
+
+    connect(document(), &QTextDocument::contentsChanged, this, [this] {
+        rebuildFindMatches();
+        scheduleSpellcheckRefresh();
+    });
+
+    scheduleSpellcheckRefresh();
 }
 
 void ScriptEditor::keyPressEvent(QKeyEvent *e)
@@ -344,6 +379,50 @@ void ScriptEditor::focusOutEvent(QFocusEvent *e)
     QTextEdit::focusOutEvent(e);
 }
 
+void ScriptEditor::contextMenuEvent(QContextMenuEvent *event)
+{
+    QMenu *menu = createStandardContextMenu();
+
+    QTextCursor tokenCursor;
+    const QString token = wordUnderCursor(&tokenCursor);
+    if (m_spellcheckEnabled && m_spellChecker && !token.isEmpty()) {
+        bool isMisspelled = false;
+        for (const Range &range : m_spellingRanges) {
+            if (range.start == tokenCursor.selectionStart() && range.length == tokenCursor.selectionEnd() - tokenCursor.selectionStart()) {
+                isMisspelled = true;
+                break;
+            }
+        }
+
+        if (isMisspelled) {
+            menu->addSeparator();
+            const QStringList suggestions = m_spellChecker->suggestionsFor(token);
+            if (suggestions.isEmpty()) {
+                QAction *noSuggestionAction = menu->addAction("No suggestions");
+                noSuggestionAction->setEnabled(false);
+            } else {
+                for (const QString &suggestion : suggestions) {
+                    QAction *replaceAction = menu->addAction(suggestion);
+                    connect(replaceAction, &QAction::triggered, this, [this, tokenCursor, suggestion] {
+                        replaceRangeText(tokenCursor.selectionStart(), tokenCursor.selectionEnd() - tokenCursor.selectionStart(), suggestion);
+                    });
+                }
+            }
+
+            QAction *addToDictionaryAction = menu->addAction("Add to Dictionary");
+            connect(addToDictionaryAction, &QAction::triggered, this, [this, token] {
+                if (m_spellChecker) {
+                    m_spellChecker->addWord(token);
+                    scheduleSpellcheckRefresh();
+                }
+            });
+        }
+    }
+
+    menu->exec(event->globalPos());
+    delete menu;
+}
+
 double ScriptEditor::dpiX() const
 {
     QScreen *screen = QGuiApplication::primaryScreen();
@@ -544,6 +623,8 @@ void ScriptEditor::clear()
     QTextEdit::clear();
     m_undoStack.clear();
     applyFormatDirect(SceneHeading);
+    rebuildFindMatches();
+    scheduleSpellcheckRefresh();
 }
 
 void ScriptEditor::redo()
@@ -578,6 +659,114 @@ void ScriptEditor::resetZoom()
         zoomIn(-m_zoomSteps);
     }
     m_zoomSteps = 0;
+}
+
+void ScriptEditor::setFindQuery(const QString &query)
+{
+    const QString normalized = query;
+    if (m_findQuery == normalized) {
+        return;
+    }
+    m_findQuery = normalized;
+    rebuildFindMatches();
+}
+
+void ScriptEditor::setFindOptions(bool caseSensitive, bool wholeWord)
+{
+    if (m_findCaseSensitive == caseSensitive && m_findWholeWord == wholeWord) {
+        return;
+    }
+    m_findCaseSensitive = caseSensitive;
+    m_findWholeWord = wholeWord;
+    rebuildFindMatches();
+}
+
+bool ScriptEditor::findNext()
+{
+    if (m_findMatches.isEmpty()) {
+        return false;
+    }
+
+    const int currentPos = textCursor().selectionEnd();
+    int nextIndex = 0;
+    for (int i = 0; i < m_findMatches.size(); ++i) {
+        if (m_findMatches[i].start >= currentPos) {
+            nextIndex = i;
+            break;
+        }
+    }
+
+    if (m_activeFindIndex >= 0 && m_activeFindIndex + 1 < m_findMatches.size()) {
+        if (m_findMatches[m_activeFindIndex].start < currentPos) {
+            nextIndex = m_activeFindIndex + 1;
+        }
+    }
+
+    applyFindMatchAtIndex(nextIndex % m_findMatches.size());
+    return true;
+}
+
+bool ScriptEditor::findPrevious()
+{
+    if (m_findMatches.isEmpty()) {
+        return false;
+    }
+
+    const int currentPos = textCursor().selectionStart();
+    int prevIndex = m_findMatches.size() - 1;
+    for (int i = m_findMatches.size() - 1; i >= 0; --i) {
+        if (m_findMatches[i].start < currentPos) {
+            prevIndex = i;
+            break;
+        }
+    }
+
+    applyFindMatchAtIndex(prevIndex);
+    return true;
+}
+
+int ScriptEditor::findMatchCount() const
+{
+    return m_findMatches.size();
+}
+
+int ScriptEditor::activeFindMatchIndex() const
+{
+    return m_activeFindIndex;
+}
+
+void ScriptEditor::setSpellcheckEnabled(bool enabled)
+{
+    if (m_spellcheckEnabled == enabled) {
+        return;
+    }
+
+    m_spellcheckEnabled = enabled;
+    if (!m_spellcheckEnabled) {
+        m_spellingRanges.clear();
+        refreshExtraSelections();
+        return;
+    }
+
+    scheduleSpellcheckRefresh();
+}
+
+bool ScriptEditor::spellcheckEnabled() const
+{
+    return m_spellcheckEnabled;
+}
+
+int ScriptEditor::spellcheckMisspellingCount() const
+{
+    return m_spellingRanges.size();
+}
+
+QStringList ScriptEditor::spellcheckSuggestions(const QString &word) const
+{
+    if (!m_spellChecker) {
+        return {};
+    }
+    return m_spellChecker->suggestionsFor(word);
 }
 
 ScriptEditor::UndoGroupType ScriptEditor::classifyChar(QChar ch) const
@@ -684,6 +873,174 @@ void ScriptEditor::buildFormats(ElementType type, QTextBlockFormat &bf, QTextCha
     bf.setAlignment(align);
 
     cf.setFontCapitalization(caps);
+}
+
+QTextDocument::FindFlags ScriptEditor::currentFindFlags() const
+{
+    QTextDocument::FindFlags flags;
+    if (m_findCaseSensitive) {
+        flags |= QTextDocument::FindCaseSensitively;
+    }
+    if (m_findWholeWord) {
+        flags |= QTextDocument::FindWholeWords;
+    }
+    return flags;
+}
+
+void ScriptEditor::rebuildFindMatches()
+{
+    m_findMatches.clear();
+    m_activeFindIndex = -1;
+
+    const QString needle = m_findQuery.trimmed();
+    if (needle.isEmpty()) {
+        refreshExtraSelections();
+        emit findResultsChanged(-1, 0);
+        return;
+    }
+
+    QTextCursor cursor(document());
+    const QTextDocument::FindFlags flags = currentFindFlags();
+
+    while (true) {
+        cursor = document()->find(needle, cursor, flags);
+        if (cursor.isNull()) {
+            break;
+        }
+
+        Range range;
+        range.start = cursor.selectionStart();
+        range.length = cursor.selectionEnd() - cursor.selectionStart();
+        if (range.length > 0) {
+            m_findMatches.append(range);
+        }
+    }
+
+    if (!m_findMatches.isEmpty()) {
+        applyFindMatchAtIndex(0);
+    } else {
+        refreshExtraSelections();
+        emit findResultsChanged(-1, 0);
+    }
+}
+
+void ScriptEditor::applyFindMatchAtIndex(int index)
+{
+    if (m_findMatches.isEmpty()) {
+        m_activeFindIndex = -1;
+        refreshExtraSelections();
+        emit findResultsChanged(-1, 0);
+        return;
+    }
+
+    m_activeFindIndex = qBound(0, index, m_findMatches.size() - 1);
+    const Range &range = m_findMatches[m_activeFindIndex];
+
+    QTextCursor cursor(document());
+    cursor.setPosition(range.start);
+    cursor.setPosition(range.start + range.length, QTextCursor::KeepAnchor);
+    setTextCursor(cursor);
+    ensureCursorVisible();
+
+    refreshExtraSelections();
+    emit findResultsChanged(m_activeFindIndex, m_findMatches.size());
+}
+
+void ScriptEditor::refreshSpellcheck()
+{
+    if (!m_spellcheckEnabled || !m_spellChecker || !m_spellChecker->isAvailable()) {
+        m_spellingRanges.clear();
+        refreshExtraSelections();
+        return;
+    }
+
+    m_spellingRanges.clear();
+    const QList<Misspelling> misspellings = m_spellChecker->checkText(toPlainText());
+    m_spellingRanges.reserve(misspellings.size());
+    for (const Misspelling &item : misspellings) {
+        if (item.length <= 0) {
+            continue;
+        }
+        Range range;
+        range.start = item.start;
+        range.length = item.length;
+        m_spellingRanges.append(range);
+    }
+
+    refreshExtraSelections();
+}
+
+void ScriptEditor::scheduleSpellcheckRefresh()
+{
+    if (!m_spellcheckTimer) {
+        return;
+    }
+    m_spellcheckTimer->start();
+}
+
+QString ScriptEditor::wordUnderCursor(QTextCursor *wordCursor) const
+{
+    QTextCursor cursor = textCursor();
+    cursor.select(QTextCursor::WordUnderCursor);
+    if (wordCursor) {
+        *wordCursor = cursor;
+    }
+    return cursor.selectedText();
+}
+
+void ScriptEditor::replaceRangeText(int start, int length, const QString &replacement)
+{
+    QTextCursor cursor(document());
+    cursor.setPosition(start);
+    cursor.setPosition(start + length, QTextCursor::KeepAnchor);
+    setTextCursor(cursor);
+
+    QUndoCommand *cmdParent = new CompoundCommand("replace");
+    new DeleteTextCommand(this, start, normalizeSelectedText(cursor.selectedText()), UndoGroupType::Bulk, false, false, cmdParent);
+    new InsertTextCommand(this, start, replacement, UndoGroupType::Bulk, false, cmdParent);
+    m_undoStack.push(cmdParent);
+
+    scheduleSpellcheckRefresh();
+}
+
+void ScriptEditor::refreshExtraSelections()
+{
+    QList<QTextEdit::ExtraSelection> selections;
+
+    QTextCharFormat misspelledFormat;
+    misspelledFormat.setUnderlineColor(QColor("#E06C75"));
+    misspelledFormat.setUnderlineStyle(QTextCharFormat::SpellCheckUnderline);
+
+    for (const Range &range : m_spellingRanges) {
+        QTextEdit::ExtraSelection sel;
+        QTextCursor cursor(document());
+        cursor.setPosition(range.start);
+        cursor.setPosition(range.start + range.length, QTextCursor::KeepAnchor);
+        sel.cursor = cursor;
+        sel.format = misspelledFormat;
+        selections.append(sel);
+    }
+
+    QTextCharFormat matchFormat;
+    matchFormat.setBackground(QColor("#7B93C466"));
+    matchFormat.setForeground(QColor("#101319"));
+
+    QTextCharFormat activeMatchFormat;
+    activeMatchFormat.setBackground(QColor("#98B7F0"));
+    activeMatchFormat.setForeground(QColor("#101319"));
+
+    for (int i = 0; i < m_findMatches.size(); ++i) {
+        const Range &range = m_findMatches[i];
+        QTextEdit::ExtraSelection sel;
+        QTextCursor cursor(document());
+        cursor.setPosition(range.start);
+        cursor.setPosition(range.start + range.length, QTextCursor::KeepAnchor);
+        sel.cursor = cursor;
+        sel.format = (i == m_activeFindIndex) ? activeMatchFormat : matchFormat;
+        selections.append(sel);
+    }
+
+    setExtraSelections(selections);
 }
 
 

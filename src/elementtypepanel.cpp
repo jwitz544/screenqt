@@ -10,18 +10,12 @@ ElementTypePanel::ElementTypePanel(QWidget *parent)
     setObjectName("elementTypePanel");
     setMinimumHeight(90);
     setMinimumWidth(240);
-    setMaximumWidth(240);
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
     
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->setContentsMargins(10, 8, 10, 8);
     layout->setSpacing(6);
     
-    // Title
-    QLabel *titleLabel = new QLabel("Element Type", this);
-    titleLabel->setObjectName("panelTitle");
-    layout->addWidget(titleLabel);
-
     QFrame *buttonGroup = new QFrame(this);
     buttonGroup->setObjectName("panelGroup");
     QVBoxLayout *buttonLayout = new QVBoxLayout(buttonGroup);

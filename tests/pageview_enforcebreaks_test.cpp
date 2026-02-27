@@ -5,6 +5,7 @@
 #include <QTextDocument>
 #include <QTextBlock>
 #include <QAbstractTextDocumentLayout>
+#include <QFont>
 #include <QFile>
 #include <QTemporaryDir>
 #include "pageview.h"
@@ -57,6 +58,43 @@ private:
     }
 
 private slots:
+    void defaultScriptFontMatchesFadeInBaseline() {
+        PageView pv;
+        QCoreApplication::processEvents();
+
+        const qreal pointSize = pv.editor()->font().pointSizeF();
+        QVERIFY2(std::abs(pointSize - 12.0) < 0.01,
+                 QString("Expected default screenplay font size 12.0pt, got %1")
+                     .arg(pointSize, 0, 'f', 2)
+                     .toUtf8().constData());
+    }
+
+    void zoomScalesFromEditorBaselineAndResetsCorrectly() {
+        PageView pv;
+        QCoreApplication::processEvents();
+
+        const qreal baseSize = pv.editor()->font().pointSizeF();
+        QVERIFY2(baseSize > 0.0, "Editor base font size should be positive");
+
+        pv.setZoomSteps(1);
+        QCoreApplication::processEvents();
+        const qreal zoomInSize = pv.editor()->font().pointSizeF();
+        QVERIFY2(std::abs(zoomInSize - (baseSize * 1.1)) < 0.02,
+                 QString("Expected zoomed font size %1, got %2")
+                     .arg(baseSize * 1.1, 0, 'f', 2)
+                     .arg(zoomInSize, 0, 'f', 2)
+                     .toUtf8().constData());
+
+        pv.setZoomSteps(0);
+        QCoreApplication::processEvents();
+        const qreal resetSize = pv.editor()->font().pointSizeF();
+        QVERIFY2(std::abs(resetSize - baseSize) < 0.01,
+                 QString("Expected reset font size %1, got %2")
+                     .arg(baseSize, 0, 'f', 2)
+                     .arg(resetSize, 0, 'f', 2)
+                     .toUtf8().constData());
+    }
+
     void noPageBreaksForSmallContent() {
         PageView pv;
         // Insert a modest number of lines that should fit on a single page

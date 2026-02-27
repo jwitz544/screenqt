@@ -31,6 +31,11 @@ PageView::PageView(QWidget *parent)
     : QWidget(parent), m_editor(new ScriptEditor(this))
 {
     qDebug() << "[PageView] Constructor starting";
+    const qreal initialPointSize = m_editor->font().pointSizeF();
+    if (initialPointSize > 0.0) {
+        m_baseFontPointSize = initialPointSize;
+    }
+
     // Remove default document margin to align layout with page calculations
     m_editor->document()->setDocumentMargin(0);
     recalculatePageMetrics();
@@ -78,14 +83,6 @@ void PageView::paintEvent(QPaintEvent *event)
         // Draw white rectangle for printable area to ensure text has white background
         QRect printableRect = m_printRect.translated(pageRect.topLeft());
         p.fillRect(printableRect, kPaperColor);
-        
-        // Draw page number in top right corner
-        QString pageNumStr = QString::number(i + 1) + ".";
-        QFont pageNumFont("Courier New", PAGE_NUM_FONT_SIZE);
-        p.setFont(pageNumFont);
-        p.setPen(kPageNumberColor);
-        QRect pageNumRect = pageRect.adjusted(0, PAGE_NUM_TOP_OFFSET, -PAGE_NUM_RIGHT_MARGIN, 0);
-        p.drawText(pageNumRect, Qt::AlignTop | Qt::AlignRight, pageNumStr);
     }
     
     const int pageTopMarginPx = m_printRect.top();
@@ -489,7 +486,7 @@ void PageView::applyZoom()
     m_zoomFactor = std::pow(ZOOM_STEP_MULTIPLIER, m_zoomSteps);
 
     QFont editorFont = m_editor->font();
-    editorFont.setPointSizeF(BASE_FONT_POINT_SIZE * m_zoomFactor);
+    editorFont.setPointSizeF(m_baseFontPointSize * m_zoomFactor);
     m_editor->setFont(editorFont);
 
     recalculatePageMetrics();

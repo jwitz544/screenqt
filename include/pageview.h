@@ -85,7 +85,7 @@ private:
     // Scroll behavior
     static constexpr int SCROLL_X_MARGIN = 40;
     static constexpr int SCROLL_Y_MARGIN = 120;
-    static constexpr double BASE_FONT_POINT_SIZE = 15.0;
+    static constexpr double DEFAULT_BASE_FONT_POINT_SIZE = 12.0;
     static constexpr int MIN_ZOOM_STEPS = -8;
     static constexpr int MAX_ZOOM_STEPS = 20;
     static constexpr double ZOOM_STEP_MULTIPLIER = 1.1;
@@ -99,4 +99,5 @@ private:
     bool m_debugMode = false;
     int m_zoomSteps = 0;
     double m_zoomFactor = 1.0;
+    double m_baseFontPointSize = DEFAULT_BASE_FONT_POINT_SIZE;
 };

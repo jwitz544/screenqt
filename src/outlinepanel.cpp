@@ -21,16 +21,11 @@ OutlinePanel::OutlinePanel(QWidget *parent)
     setObjectName("outlinePanel");
     setMinimumHeight(90);
     setMinimumWidth(240);
-    setMaximumWidth(240);
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(10, 8, 10, 8);
     layout->setSpacing(6);
-
-    auto *title = new QLabel("Outline", this);
-    title->setObjectName("panelTitle");
-    layout->addWidget(title);
 
     m_sceneCountLabel = new QLabel("0 scenes", this);
     m_sceneCountLabel->setObjectName("panelMeta");
@@ -44,7 +39,8 @@ OutlinePanel::OutlinePanel(QWidget *parent)
 
     m_sceneList = new QListWidget(sceneListCard);
     m_sceneList->setObjectName("sceneList");
-    m_sceneList->setSpacing(2);
+    m_sceneList->setSpacing(0);
+    m_sceneList->setUniformItemSizes(true);
     sceneCardLayout->addWidget(m_sceneList, 1);
     layout->addWidget(sceneListCard, 1);
 
@@ -96,6 +92,7 @@ void OutlinePanel::refreshOutline()
         const QString label = QString("%1. %2").arg(sceneNumber).arg(sceneText);
         auto *item = new QListWidgetItem(label, m_sceneList);
         item->setData(ScenePositionRole, block.position());
+        item->setSizeHint(QSize(item->sizeHint().width(), 26));
         sceneNumber++;
     }
 
@@ -106,6 +103,7 @@ void OutlinePanel::refreshOutline()
         auto *emptyItem = new QListWidgetItem("No scenes yet", m_sceneList);
         emptyItem->setFlags(emptyItem->flags() & ~Qt::ItemIsSelectable);
         emptyItem->setForeground(QColor("#7f8ca3"));
+        emptyItem->setSizeHint(QSize(emptyItem->sizeHint().width(), 24));
     }
 
     syncSelectionToCursor();
