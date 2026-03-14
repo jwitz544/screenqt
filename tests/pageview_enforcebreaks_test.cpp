@@ -8,6 +8,7 @@
 #include <QFont>
 #include <QFile>
 #include <QTemporaryDir>
+#include <QSet>
 #include "pageview.h"
 #include "scripteditor.h"
 
@@ -153,6 +154,40 @@ private slots:
             int topMargin = static_cast<int>(block.blockFormat().topMargin());
             QVERIFY2(topMargin < pv.pageGapPx(), "Residual page-break margin after content reduction");
         }
+    }
+
+    void dialogueSplitGeneratesContinuationMarkers() {
+        PageView pv;
+        pv.editor()->clear();
+
+        QTextCursor cursor(pv.editor()->document());
+        cursor.movePosition(QTextCursor::Start);
+
+        cursor.insertText("JOE");
+        QTextBlock charBlock = cursor.block();
+        charBlock.setUserState(static_cast<int>(ScriptEditor::CharacterName));
+
+        cursor.insertText("\n");
+        const QString longDialogue = QString("we keep talking ").repeated(800);
+        cursor.insertText(longDialogue);
+        QTextBlock dialogueBlock = cursor.block();
+        dialogueBlock.setUserState(static_cast<int>(ScriptEditor::Dialogue));
+
+        pv.editor()->formatDocument();
+        QCoreApplication::processEvents();
+
+        QVERIFY2(pv.pageCount() >= 2, "Expected long dialogue to span multiple pages");
+
+        const QVector<PageView::ContinuationMarker> markers = pv.continuationMarkers();
+        QVERIFY2(!markers.isEmpty(), "Expected continuation markers for split dialogue");
+
+        QSet<QString> texts;
+        for (const auto &marker : markers) {
+            texts.insert(marker.text);
+        }
+
+        QVERIFY2(texts.contains("(MORE)"), "Expected (MORE) marker for split dialogue");
+        QVERIFY2(texts.contains("(CONT'D)"), "Expected (CONT'D) marker for split dialogue");
     }
 
     void paginationOffsetsAreZero() {

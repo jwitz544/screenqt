@@ -25,25 +25,28 @@ CharactersPanel::CharactersPanel(QWidget *parent)
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(10, 8, 10, 8);
-    layout->setSpacing(6);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+
+    auto *header = new QLabel("CAST", this);
+    header->setObjectName("panelSectionHeader");
+    layout->addWidget(header);
+
+    auto *divider = new QFrame(this);
+    divider->setObjectName("panelDivider");
+    divider->setFixedHeight(1);
+    layout->addWidget(divider);
 
     m_characterCountLabel = new QLabel("0 characters", this);
     m_characterCountLabel->setObjectName("panelMeta");
     layout->addWidget(m_characterCountLabel);
 
-    QFrame *listCard = new QFrame(this);
-    listCard->setObjectName("panelGroup");
-    auto *cardLayout = new QVBoxLayout(listCard);
-    cardLayout->setContentsMargins(4, 4, 4, 4);
-    cardLayout->setSpacing(0);
-
-    m_characterList = new QListWidget(listCard);
+    m_characterList = new QListWidget(this);
     m_characterList->setObjectName("sceneList");
     m_characterList->setSpacing(0);
     m_characterList->setUniformItemSizes(true);
-    cardLayout->addWidget(m_characterList, 1);
-    layout->addWidget(listCard, 1);
+    m_characterList->setFrameStyle(QFrame::NoFrame);
+    layout->addWidget(m_characterList, 1);
 
     connect(m_characterList, &QListWidget::itemClicked, this, &CharactersPanel::goToCharacter);
 }

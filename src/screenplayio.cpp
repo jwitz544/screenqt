@@ -1,5 +1,6 @@
 #include "screenplayio.h"
 
+#include "documentsettings.h"
 #include "scripteditor.h"
 
 #include <QFile>
@@ -81,6 +82,89 @@ bool saveAsSqtFile(ScriptEditor *editor, const QString &filePath)
     return true;
 }
 
+QJsonObject titlePageToJson(const TitlePageData &titlePage)
+{
+    QJsonObject obj;
+    obj["title"]     = titlePage.title;
+    obj["author"]    = titlePage.author;
+    obj["credit"]    = titlePage.credit;
+    obj["contact"]   = titlePage.contact;
+    obj["draftDate"] = titlePage.draftDate;
+    obj["wgaNumber"] = titlePage.wgaNumber;
+    return obj;
+}
+
+TitlePageData titlePageFromJson(const QJsonObject &obj)
+{
+    TitlePageData titlePage;
+    titlePage.title     = obj["title"].toString();
+    titlePage.author    = obj["author"].toString();
+    titlePage.credit    = obj["credit"].toString();
+    titlePage.contact   = obj["contact"].toString();
+    titlePage.draftDate = obj["draftDate"].toString();
+    titlePage.wgaNumber = obj["wgaNumber"].toString();
+    return titlePage;
+}
+
+QJsonObject documentSettingsToJson(const DocumentSettings &settings)
+{
+    QJsonObject obj;
+    obj["hasTitlePage"] = settings.hasTitlePage;
+    obj["titlePage"] = titlePageToJson(settings.titlePage);
+
+    QJsonObject pageNumbering;
+    pageNumbering["enabled"] = settings.pageNumbering.enabled;
+    pageNumbering["startNumber"] = settings.pageNumbering.startNumber;
+    pageNumbering["numberTitlePage"] = settings.pageNumbering.numberTitlePage;
+    obj["pageNumbering"] = pageNumbering;
+    return obj;
+}
+
+DocumentSettings documentSettingsFromJson(const QJsonObject &obj)
+{
+    DocumentSettings settings;
+    settings.hasTitlePage = obj["hasTitlePage"].toBool(false);
+    settings.titlePage = titlePageFromJson(obj["titlePage"].toObject());
+
+    const QJsonObject pageNumbering = obj["pageNumbering"].toObject();
+    settings.pageNumbering.enabled = pageNumbering["enabled"].toBool(true);
+    settings.pageNumbering.startNumber = qMax(1, pageNumbering["startNumber"].toInt(1));
+    settings.pageNumbering.numberTitlePage = pageNumbering["numberTitlePage"].toBool(false);
+    return settings;
+}
+
+bool saveAsSqtFile(ScriptEditor *editor, const QString &filePath, const DocumentSettings *settings)
+{
+    QFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly)) {
+        return false;
+    }
+
+    QJsonArray lines;
+    QTextDocument *doc = editor->document();
+    QTextBlock block = doc->begin();
+
+    while (block.isValid()) {
+        QJsonObject line;
+        line["text"] = block.text();
+        line["type"] = block.userState();
+        lines.append(line);
+        block = block.next();
+    }
+
+    QJsonObject root;
+    root["version"] = 2;
+    root["lines"] = lines;
+    if (settings) {
+        root["meta"] = documentSettingsToJson(*settings);
+    }
+
+    QJsonDocument jsonDoc(root);
+    file.write(jsonDoc.toJson());
+    file.close();
+    return true;
+}
+
 bool saveAsFdxFile(ScriptEditor *editor, const QString &filePath)
 {
     QFile file(filePath);
@@ -122,7 +206,7 @@ bool saveAsFdxFile(ScriptEditor *editor, const QString &filePath)
     return !xml.hasError();
 }
 
-bool loadSqtFile(ScriptEditor *editor, const QString &filePath, int &lineCount)
+bool loadSqtFile(ScriptEditor *editor, const QString &filePath, int &lineCount, DocumentSettings *settings)
 {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
@@ -139,6 +223,14 @@ bool loadSqtFile(ScriptEditor *editor, const QString &filePath, int &lineCount)
 
     QJsonObject root = jsonDoc.object();
     QJsonArray lines = root["lines"].toArray();
+
+    if (settings) {
+        if (root.contains("meta") && root["meta"].isObject()) {
+            *settings = documentSettingsFromJson(root["meta"].toObject());
+        } else {
+            *settings = DocumentSettings();
+        }
+    }
 
     editor->clear();
     QTextCursor cursor(editor->document());
@@ -217,22 +309,25 @@ bool loadFdxFile(ScriptEditor *editor, const QString &filePath, int &lineCount)
 
 namespace ScreenplayIO {
 
-bool saveDocument(ScriptEditor *editor, const QString &filePath)
+bool saveDocument(ScriptEditor *editor, const QString &filePath, const DocumentSettings *settings)
 {
     const QString extension = QFileInfo(filePath).suffix().toLower();
     if (extension == QStringLiteral("fdx")) {
         return saveAsFdxFile(editor, filePath);
     }
-    return saveAsSqtFile(editor, filePath);
+    return saveAsSqtFile(editor, filePath, settings);
 }
 
-bool loadDocument(ScriptEditor *editor, const QString &filePath, int &lineCount)
+bool loadDocument(ScriptEditor *editor, const QString &filePath, int &lineCount, DocumentSettings *settings)
 {
     const QString extension = QFileInfo(filePath).suffix().toLower();
     if (extension == QStringLiteral("fdx")) {
+        if (settings) {
+            *settings = DocumentSettings();
+        }
         return loadFdxFile(editor, filePath, lineCount);
     }
-    return loadSqtFile(editor, filePath, lineCount);
+    return loadSqtFile(editor, filePath, lineCount, settings);
 }
 
 } // namespace ScreenplayIO

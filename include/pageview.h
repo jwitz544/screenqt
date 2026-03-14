@@ -2,11 +2,19 @@
 #include <QWidget>
 #include <QRect>
 #include <QScrollArea>
+#include <QVector>
+#include "documentsettings.h"
 class ScriptEditor;
 
 class PageView : public QWidget {
     Q_OBJECT
 public:
+    struct ContinuationMarker {
+        int pageIndex = 0;
+        bool isTop = false;
+        QString text;
+    };
+
     explicit PageView(QWidget *parent = nullptr);
     ScriptEditor* editor() const { return m_editor; }
     int pageGapPx() const { return PAGE_GAP_PX; }
@@ -22,8 +30,14 @@ public:
     bool saveToFile(const QString &filePath);
     bool loadFromFile(const QString &filePath);
     bool exportToPdf(const QString &filePath);
+    const DocumentSettings &documentSettings() const { return m_documentSettings; }
+    void setDocumentSettings(const DocumentSettings &settings) { m_documentSettings = settings; }
+    const QVector<ContinuationMarker> &continuationMarkers() const { return m_continuationMarkers; }
     int zoomSteps() const { return m_zoomSteps; }
     void setZoomSteps(int steps);
+
+signals:
+    void pageCountChanged(int pageCount);
 
 public slots:
     void scrollToCursor();
@@ -100,4 +114,6 @@ private:
     int m_zoomSteps = 0;
     double m_zoomFactor = 1.0;
     double m_baseFontPointSize = DEFAULT_BASE_FONT_POINT_SIZE;
+    DocumentSettings m_documentSettings;
+    QVector<ContinuationMarker> m_continuationMarkers;
 };

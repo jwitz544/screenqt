@@ -15,6 +15,7 @@
 #include <QScrollArea>
 #include <QDebug>
 #include <QTimer>
+#include <QSet>
 #include <cmath>
 
 namespace {
@@ -25,12 +26,12 @@ int blockHeightPx(QTextDocument *doc, const QTextBlock &block) {
 const QColor kPaperColor(246, 246, 242);
 const QColor kPageTextColor(36, 38, 44);
 const QColor kPageNumberColor(92, 96, 106);
+constexpr int kDialogueElementState = static_cast<int>(ScriptEditor::Dialogue);
 }
 
 PageView::PageView(QWidget *parent)
     : QWidget(parent), m_editor(new ScriptEditor(this))
 {
-    qDebug() << "[PageView] Constructor starting";
     const qreal initialPointSize = m_editor->font().pointSizeF();
     if (initialPointSize > 0.0) {
         m_baseFontPointSize = initialPointSize;
@@ -60,7 +61,6 @@ PageView::PageView(QWidget *parent)
     connect(m_editor, &QTextEdit::cursorPositionChanged, this, &PageView::scrollToCursor);
 
     layoutPages();
-    qDebug() << "[PageView] Constructor complete, page count:" << m_pageCount;
 }
 
 void PageView::paintEvent(QPaintEvent *event)
@@ -83,6 +83,28 @@ void PageView::paintEvent(QPaintEvent *event)
         // Draw white rectangle for printable area to ensure text has white background
         QRect printableRect = m_printRect.translated(pageRect.topLeft());
         p.fillRect(printableRect, kPaperColor);
+    }
+
+    if (!m_continuationMarkers.isEmpty()) {
+        QFont markerFont("Courier New", 10);
+        p.setFont(markerFont);
+        p.setPen(kPageTextColor);
+
+        for (const ContinuationMarker &marker : m_continuationMarkers) {
+            if (marker.pageIndex < 0 || marker.pageIndex >= m_pageCount) {
+                continue;
+            }
+
+            const int markerPageTop = pageYOffset(marker.pageIndex);
+            const int markerX = x + m_printRect.left();
+            int markerY = markerPageTop + m_printRect.top() + 4;
+            if (!marker.isTop) {
+                markerY = markerPageTop + m_printRect.top() + m_printRect.height() - 20;
+            }
+
+            QRect textRect(markerX, markerY, m_printRect.width(), 16);
+            p.drawText(textRect, Qt::AlignRight | Qt::AlignVCenter, marker.text);
+        }
     }
     
     const int pageTopMarginPx = m_printRect.top();
@@ -450,6 +472,7 @@ void PageView::updatePagination()
         m_pageCount = pages;
         layoutPages();
         update();
+        emit pageCountChanged(m_pageCount);
     }
 }
 
@@ -549,7 +572,7 @@ int PageView::pagePrintableStartY(int pageIndex) const
 bool PageView::saveToFile(const QString &filePath)
 {
     qDebug() << "[PageView] Saving to:" << filePath;
-    const bool ok = ScreenplayIO::saveDocument(m_editor, filePath);
+    const bool ok = ScreenplayIO::saveDocument(m_editor, filePath, &m_documentSettings);
 
     if (!ok) {
         qDebug() << "[PageView] Failed to write file";
@@ -570,33 +593,28 @@ bool PageView::loadFromFile(const QString &filePath)
     m_loading = true; // Prevent enforcePageBreaks during load
 
     int loadedLineCount = 0;
-    const bool ok = ScreenplayIO::loadDocument(m_editor, filePath, loadedLineCount);
+    DocumentSettings loadedSettings;
+    const bool ok = ScreenplayIO::loadDocument(m_editor, filePath, loadedLineCount, &loadedSettings);
     if (!ok) {
         qDebug() << "[PageView] Failed to load screenplay";
         m_loading = false;
         return false;
     }
 
+    m_documentSettings = loadedSettings;
+
     m_editor->moveCursor(QTextCursor::Start);
-    qDebug() << "[PageView::loadFromFile] Before formatDocument, isUndoAvailable:" << m_editor->document()->isUndoAvailable();
     m_editor->formatDocument();
-    qDebug() << "[PageView::loadFromFile] After formatDocument, isUndoAvailable:" << m_editor->document()->isUndoAvailable();
-    
+
     // Clear loading flag, disconnect textChanged, run enforcePageBreaks once, clear undo, reconnect
-    QTimer::singleShot(0, this, [this, loadedLineCount]() {
+    QTimer::singleShot(0, this, [this]() {
         m_loading = false;
-        qDebug() << "[PageView::loadFromFile] Disconnecting textChanged signal";
         disconnect(m_editor, &QTextEdit::textChanged, this, &PageView::enforcePageBreaks);
-        
-        enforcePageBreaks(); // Run once with undo disabled
-        
+        enforcePageBreaks();
         m_editor->document()->clearUndoRedoStacks();
-        qDebug() << "[PageView::loadFromFile] Loaded" << loadedLineCount << "lines, loading complete, undo stack cleared, isUndoAvailable:" << m_editor->document()->isUndoAvailable();
-        
-        qDebug() << "[PageView::loadFromFile] Reconnecting textChanged signal";
         connect(m_editor, &QTextEdit::textChanged, this, &PageView::enforcePageBreaks);
     });
-    
+
     return true;
 }
 
@@ -620,6 +638,7 @@ bool PageView::exportToPdf(const QString &filePath)
     settings.pageNumberHeight = PDF_PAGE_NUM_HEIGHT;
     settings.pageNumberRightOffset = PDF_PAGE_NUM_RIGHT_OFFSET;
     settings.pageNumberTopOffset = PDF_PAGE_NUM_TOP_OFFSET;
+    settings.documentSettings = m_documentSettings;
 
     return PdfExporter::exportDocumentToPdf(m_editor->document(), filePath, settings);
 }
@@ -643,7 +662,6 @@ void PageView::enforcePageBreaks()
     
     // Skip during document loading/initialization
     if (m_loading) {
-        qDebug() << "[PageView::enforcePageBreaks] Skipping - document is loading";
         return;
     }
     
@@ -651,8 +669,6 @@ void PageView::enforcePageBreaks()
     
     // Temporarily disconnect textChanged to prevent re-triggering during modifications
     disconnect(m_editor, &QTextEdit::textChanged, this, &PageView::enforcePageBreaks);
-    
-    qDebug() << "[PageView] enforcePageBreaks called";
     
     QTextDocument *doc = m_editor->document();
     const int printableH = printableHeightPerPage();
@@ -662,6 +678,8 @@ void PageView::enforcePageBreaks()
     // Calculate which blocks need page break margins and what those margins should be
     // Key: block position, Value: required top margin for page break
     QMap<int, int> requiredPageBreakMargins;
+    QVector<ContinuationMarker> newMarkers;
+    QSet<QString> markerKeys;
     
     // Use ABSOLUTE coordinates throughout:
     // - naturalY starts at pageTopMarginPx (96) - first content position below page 1's top margin
@@ -684,18 +702,10 @@ void PageView::enforcePageBreaks()
         int existingPageBreakMargin = fmt.property(QTextFormat::UserProperty + 1).toInt();
         int marginForCalculation = baseMargin - existingPageBreakMargin;
         
-        // Get actual Qt block position for debug
-        qreal qtBlockY = doc->documentLayout()->blockBoundingRect(block).top();
-        
         // Calculate position within current page's printable area
         // Printable area starts at pageStartY + pageTopMarginPx
         int printableStartY = pageStartY + pageTopMarginPx;
         int posInPage = (naturalY - printableStartY) + marginForCalculation;
-        
-        qDebug() << "[Block" << blockIdx << "] naturalY=" << naturalY << "qtBlockY=" << qtBlockY
-                 << "pageStartY=" << pageStartY << "printableStartY=" << printableStartY
-                 << "marginForCalc=" << marginForCalculation << "blockHeight=" << blockHeight
-                 << "posInPage=" << posInPage << "overflow?" << (posInPage + blockHeight > printableH);
         
         // Does it overflow the page?
         if (posInPage + blockHeight > printableH && posInPage > 0) {
@@ -715,14 +725,25 @@ void PageView::enforcePageBreaks()
                 pageBreakMargin -= marginForCalculation;
             }
             
-            qDebug() << "[enforcePageBreaks] Block" << blockIdx << "OVERFLOWS:";
-            qDebug() << "  pageStartY=" << pageStartY << "nextPageStartY=" << nextPageStartY;
-            qDebug() << "  nextPagePrintableStart=" << nextPagePrintableStart;
-            qDebug() << "  naturalY=" << naturalY << "qtBlockY=" << qtBlockY << "marginForCalculation=" << marginForCalculation;
-            qDebug() << "  naturalY + marginForCalculation=" << (naturalY + marginForCalculation);
-            qDebug() << "  pageBreakMargin=" << pageBreakMargin;
-            
             requiredPageBreakMargins[block.position()] = pageBreakMargin;
+
+            if (block.userState() == kDialogueElementState) {
+                const int pageAdvance = m_pageRect.height() + PAGE_GAP_PX;
+                const int previousPageIndex = pageStartY / pageAdvance;
+                const int nextPageIndex = previousPageIndex + 1;
+
+                const QString lowerKey = QString("%1:%2").arg(previousPageIndex).arg("MORE");
+                if (!markerKeys.contains(lowerKey)) {
+                    markerKeys.insert(lowerKey);
+                    newMarkers.append(ContinuationMarker{previousPageIndex, false, "(MORE)"});
+                }
+
+                const QString upperKey = QString("%1:%2").arg(nextPageIndex).arg("CONTD");
+                if (!markerKeys.contains(upperKey)) {
+                    markerKeys.insert(upperKey);
+                    newMarkers.append(ContinuationMarker{nextPageIndex, true, "(CONT'D)"});
+                }
+            }
             
             // Move to next page tracking
             pageStartY = nextPageStartY;
@@ -733,6 +754,9 @@ void PageView::enforcePageBreaks()
         }
         blockIdx++;
     }
+
+    m_continuationMarkers = newMarkers;
+    update();
     
     // Now check current state and only modify if needed
     bool needsChanges = false;

@@ -12,16 +12,16 @@ struct Misspelling {
     QStringList suggestions;
 };
 
-class ISpellChecker {
+class AbstractSpellChecker {
 public:
-    virtual ~ISpellChecker() = default;
+    virtual ~AbstractSpellChecker() = default;
     virtual bool isAvailable() const = 0;
     virtual QList<Misspelling> checkText(const QString &text) const = 0;
     virtual QStringList suggestionsFor(const QString &word) const = 0;
     virtual void addWord(const QString &word) = 0;
 };
 
-class BasicSpellChecker final : public ISpellChecker {
+class BasicSpellChecker final : public AbstractSpellChecker {
 public:
     BasicSpellChecker();
 

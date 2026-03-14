@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QString>
+#include "documentsettings.h"
 
 class QTextDocument;
 
@@ -24,6 +25,8 @@ struct Settings {
     int pageNumberHeight = 30;
     int pageNumberRightOffset = 100;
     int pageNumberTopOffset = 20;
+
+    DocumentSettings documentSettings;
 };
 
 bool exportDocumentToPdf(QTextDocument *document, const QString &filePath, const Settings &settings);

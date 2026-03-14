@@ -10,8 +10,15 @@ if(MSVC)
     add_compile_options(/Zc:__cplusplus /permissive-)
 endif()
 
-# Set Qt installation path
-set(CMAKE_PREFIX_PATH "C:/Qt/6.10.1/msvc2022_64")
+# Qt path: configure via environment variable or -DCMAKE_PREFIX_PATH on the cmake command line.
+# e.g.:  cmake -DCMAKE_PREFIX_PATH=C:/Qt/6.10.1/msvc2022_64 ..
+#   or:  set Qt6_DIR=C:/Qt/6.10.1/msvc2022_64/lib/cmake/Qt6
+#   or:  set QTDIR=C:/Qt/6.10.1/msvc2022_64
+if(DEFINED ENV{Qt6_DIR})
+    list(APPEND CMAKE_PREFIX_PATH $ENV{Qt6_DIR})
+elseif(DEFINED ENV{QTDIR})
+    list(APPEND CMAKE_PREFIX_PATH $ENV{QTDIR})
+endif()
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -23,6 +30,7 @@ set(CMAKE_DISABLE_FIND_PACKAGE_Vulkan TRUE)
 set(CMAKE_DISABLE_FIND_PACKAGE_WrapVulkanHeaders TRUE)
 
 find_package(Qt6 COMPONENTS Core Gui Widgets PrintSupport REQUIRED)
+find_package(Qt6 COMPONENTS Pdf QUIET)
 
 option(SCREENQT_ENABLE_DEPLOY "Run windeployqt for app target" OFF)
 option(SCREENQT_ENABLE_TEST_DEPLOY "Run windeployqt for test targets" OFF)
@@ -50,7 +58,21 @@ add_library(screenqt_core STATIC
     include/findbar.h
     src/spellcheckservice.cpp
     include/spellcheckservice.h
+    src/mainwindow.cpp
+    include/mainwindow.h
+    src/titlepage_dialog.cpp
+    include/titlepage_dialog.h
+    src/fountainio.cpp
+    include/fountainio.h
 )
+
+if(WIN32)
+    target_sources(screenqt_core PRIVATE
+        src/windowsspellchecker.cpp
+        include/windowsspellchecker.h
+    )
+    target_link_libraries(screenqt_core PUBLIC ole32)
+endif()
 
 target_include_directories(screenqt_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -74,11 +96,15 @@ if(WIN32 AND SCREENQT_ENABLE_DEPLOY)
     # Comment out WIN32_EXECUTABLE to show console for debugging
     # set_target_properties(screenqt PROPERTIES WIN32_EXECUTABLE ON)
 
-    # Automatically run windeployqt after building
-    add_custom_command(TARGET screenqt POST_BUILD
-        COMMAND "${CMAKE_PREFIX_PATH}/bin/windeployqt.exe" "$<TARGET_FILE:screenqt>"
-        COMMENT "Running windeployqt..."
-    )
+    find_program(WINDEPLOYQT_EXECUTABLE NAMES windeployqt windeployqt6
+        HINTS "${Qt6_DIR}/../../../bin")
+
+    if(WINDEPLOYQT_EXECUTABLE)
+        add_custom_command(TARGET screenqt POST_BUILD
+            COMMAND "${WINDEPLOYQT_EXECUTABLE}" "$<TARGET_FILE:screenqt>"
+            COMMENT "Running windeployqt..."
+        )
+    endif()
 endif()
 
 # --- Tests ---
@@ -130,24 +156,46 @@ target_link_libraries(scripteditor_find_spellcheck_tests
 
 add_test(NAME scripteditor_find_spellcheck COMMAND scripteditor_find_spellcheck_tests -o scripteditor_find_spellcheck.txt,txt)
 
+add_executable(document_settings_tests
+    tests/document_settings_test.cpp
+)
+
+target_link_libraries(document_settings_tests
+    screenqt_core
+    Qt6::Test
+)
+
+add_test(NAME document_settings COMMAND document_settings_tests -o document_settings.txt,txt)
+
+add_executable(pdf_export_tests
+    tests/pdf_export_test.cpp
+)
+
+target_link_libraries(pdf_export_tests
+    screenqt_core
+    Qt6::Test
+)
+
+if(TARGET Qt6::Pdf)
+    target_link_libraries(pdf_export_tests Qt6::Pdf)
+    target_compile_definitions(pdf_export_tests PRIVATE SCREENQT_HAS_QTPDF=1)
+endif()
+
+add_test(NAME pdf_export COMMAND pdf_export_tests -o pdf_export.txt,txt)
+
 if(WIN32 AND SCREENQT_ENABLE_TEST_DEPLOY)
-    add_custom_command(TARGET pageview_tests POST_BUILD
-        COMMAND "${CMAKE_PREFIX_PATH}/bin/windeployqt.exe" "$<TARGET_FILE:pageview_tests>"
-        COMMENT "Running windeployqt for tests..."
-    )
+    if(NOT WINDEPLOYQT_EXECUTABLE)
+        find_program(WINDEPLOYQT_EXECUTABLE NAMES windeployqt windeployqt6
+            HINTS "${Qt6_DIR}/../../../bin")
+    endif()
 
-    add_custom_command(TARGET scripteditor_undo_tests POST_BUILD
-        COMMAND "${CMAKE_PREFIX_PATH}/bin/windeployqt.exe" "$<TARGET_FILE:scripteditor_undo_tests>"
-        COMMENT "Running windeployqt for scripteditor_undo_tests..."
-    )
-
-    add_custom_command(TARGET scripteditor_format_tests POST_BUILD
-        COMMAND "${CMAKE_PREFIX_PATH}/bin/windeployqt.exe" "$<TARGET_FILE:scripteditor_format_tests>"
-        COMMENT "Running windeployqt for scripteditor_format_tests..."
-    )
-
-    add_custom_command(TARGET scripteditor_find_spellcheck_tests POST_BUILD
-        COMMAND "${CMAKE_PREFIX_PATH}/bin/windeployqt.exe" "$<TARGET_FILE:scripteditor_find_spellcheck_tests>"
-        COMMENT "Running windeployqt for scripteditor_find_spellcheck_tests..."
-    )
+    if(WINDEPLOYQT_EXECUTABLE)
+        foreach(_test pageview_tests scripteditor_undo_tests scripteditor_format_tests
+                      scripteditor_find_spellcheck_tests document_settings_tests pdf_export_tests)
+            add_custom_command(TARGET ${_test} POST_BUILD
+                COMMAND "${WINDEPLOYQT_EXECUTABLE}" "$<TARGET_FILE:${_test}>"
+                COMMENT "Running windeployqt for ${_test}..."
+            )
+        endforeach()
+    endif()
 endif()

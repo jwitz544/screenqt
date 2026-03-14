@@ -24,25 +24,28 @@ OutlinePanel::OutlinePanel(QWidget *parent)
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(10, 8, 10, 8);
-    layout->setSpacing(6);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+
+    auto *header = new QLabel("SCENES", this);
+    header->setObjectName("panelSectionHeader");
+    layout->addWidget(header);
+
+    auto *divider = new QFrame(this);
+    divider->setObjectName("panelDivider");
+    divider->setFixedHeight(1);
+    layout->addWidget(divider);
 
     m_sceneCountLabel = new QLabel("0 scenes", this);
     m_sceneCountLabel->setObjectName("panelMeta");
     layout->addWidget(m_sceneCountLabel);
 
-    QFrame *sceneListCard = new QFrame(this);
-    sceneListCard->setObjectName("panelGroup");
-    auto *sceneCardLayout = new QVBoxLayout(sceneListCard);
-    sceneCardLayout->setContentsMargins(4, 4, 4, 4);
-    sceneCardLayout->setSpacing(0);
-
-    m_sceneList = new QListWidget(sceneListCard);
+    m_sceneList = new QListWidget(this);
     m_sceneList->setObjectName("sceneList");
     m_sceneList->setSpacing(0);
     m_sceneList->setUniformItemSizes(true);
-    sceneCardLayout->addWidget(m_sceneList, 1);
-    layout->addWidget(sceneListCard, 1);
+    m_sceneList->setFrameStyle(QFrame::NoFrame);
+    layout->addWidget(m_sceneList, 1);
 
     connect(m_sceneList, &QListWidget::itemClicked, this, &OutlinePanel::goToScene);
 }

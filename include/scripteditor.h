@@ -50,6 +50,8 @@ public:
     bool spellcheckEnabled() const;
     int spellcheckMisspellingCount() const;
     QStringList spellcheckSuggestions(const QString &word) const;
+    bool replaceCurrent(const QString &replacement);
+    int  replaceAll(const QString &replacement);
 
 
 public slots:
@@ -111,11 +113,13 @@ private:
     QVector<Range> m_findMatches;
     int m_activeFindIndex = -1;
     bool m_spellcheckEnabled = true;
-    std::unique_ptr<ISpellChecker> m_spellChecker;
+    std::unique_ptr<AbstractSpellChecker> m_spellChecker;
     QVector<Range> m_spellingRanges;
     QTimer *m_spellcheckTimer = nullptr;
 
 signals:
     void elementChanged(ElementType type);
     void findResultsChanged(int activeIndex, int totalMatches);
+    void undoAvailableChanged(bool canUndo);
+    void redoAvailableChanged(bool canRedo);
 };

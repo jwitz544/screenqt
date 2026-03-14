@@ -1,5 +1,8 @@
 #include "scripteditor.h"
 #include "spellcheckservice.h"
+#ifdef Q_OS_WIN
+#include "windowsspellchecker.h"
+#endif
 #include <QTextCursor>
 #include <QTextBlock>
 #include <QTextBlockFormat>
@@ -65,7 +68,6 @@ ScriptEditor::ScriptEditor(QWidget *parent)
     setViewportMargins(0, 0, 0, 0);
 
     // Disable document undo/redo (custom undo stack handles it)
-    qDebug() << "[ScriptEditor] Constructor: Disabling document undo/redo";
     document()->setUndoRedoEnabled(false);
     setUndoRedoEnabled(false);
 
@@ -102,24 +104,31 @@ ScriptEditor::ScriptEditor(QWidget *parent)
         insertChosenCompletion(completion);
     });
 
+    // Emit undo/redo availability changes from the custom undo stack
+    connect(&m_undoStack, &QUndoStack::canUndoChanged, this, &ScriptEditor::undoAvailableChanged);
+    connect(&m_undoStack, &QUndoStack::canRedoChanged, this, &ScriptEditor::redoAvailableChanged);
+
     // Start with Scene Heading element without pushing undo state
     applyFormatDirect(SceneHeading);
-    qDebug() << "[ScriptEditor] Constructor: After applyFormatDirect, isUndoAvailable:" << document()->isUndoAvailable();
 
     // Emit element changes when cursor moves
     connect(this, &QTextEdit::cursorPositionChanged, this, [this]{
         emit elementChanged(currentElement());
     });
-    
-    // Log when text changes to track undo availability
-    connect(document(), &QTextDocument::contentsChanged, this, [this]{
-        qDebug() << "[ScriptEditor] contentsChanged, isUndoAvailable:" << document()->isUndoAvailable() << "isRedoAvailable:" << document()->isRedoAvailable();
-    });
-    connect(this, &QTextEdit::undoAvailable, [](bool avail){
-        qDebug() << "Undo available:" << avail;
-    });
 
+#ifdef Q_OS_WIN
+    {
+        auto *wsc = new WindowsSpellChecker();
+        if (wsc->isAvailable()) {
+            m_spellChecker.reset(wsc);
+        } else {
+            delete wsc;
+            m_spellChecker = std::make_unique<BasicSpellChecker>();
+        }
+    }
+#else
     m_spellChecker = std::make_unique<BasicSpellChecker>();
+#endif
     m_spellcheckTimer = new QTimer(this);
     m_spellcheckTimer->setSingleShot(true);
     m_spellcheckTimer->setInterval(250);
@@ -135,8 +144,6 @@ ScriptEditor::ScriptEditor(QWidget *parent)
 
 void ScriptEditor::keyPressEvent(QKeyEvent *e)
 {
-    qDebug() << "[ScriptEditor] keyPressEvent: key=" << e->key() << "text=" << e->text() << "modifiers=" << e->modifiers();
-
     if (m_completer && m_completer->popup()->isVisible()) {
         switch (e->key()) {
         case Qt::Key_Return:
@@ -161,15 +168,12 @@ void ScriptEditor::keyPressEvent(QKeyEvent *e)
 
     if (e->matches(QKeySequence::Undo)) {
         hideCompletionPopup();
-        qDebug() << "[ScriptEditor] Undo keystroke intercepted. Stack has" << m_undoStack.count() << "commands, canUndo=" << m_undoStack.canUndo();
         m_undoStack.undo();
-        qDebug() << "[ScriptEditor] After undo: Stack has" << m_undoStack.count() << "commands, canUndo=" << m_undoStack.canUndo();
         return;
     }
 
     if (e->matches(QKeySequence::Redo)) {
         hideCompletionPopup();
-        qDebug() << "[ScriptEditor] Redo keystroke intercepted";
         m_undoStack.redo();
         return;
     }
@@ -177,24 +181,17 @@ void ScriptEditor::keyPressEvent(QKeyEvent *e)
     if (e->matches(QKeySequence::Paste)) {
         hideCompletionPopup();
         QTextCursor cursor = textCursor();
-        QString text = QGuiApplication::clipboard()->text();
-        if (text.isEmpty()) {
-            return;
-        }
+        const QString text = QGuiApplication::clipboard()->text();
+        if (text.isEmpty()) return;
 
-        QUndoCommand *cmdParent = nullptr;
         int insertPos = cursor.position();
         if (cursor.hasSelection()) {
-            cmdParent = new CompoundCommand("paste");
+            auto *cmd = new CompoundCommand("paste");
             int selStart = cursor.selectionStart();
             QString selText = normalizeSelectedText(cursor.selectedText());
-            new DeleteTextCommand(this, selStart, selText, UndoGroupType::Bulk, false, false, cmdParent);
-            insertPos = selStart;
-        }
-
-        new InsertTextCommand(this, insertPos, text, UndoGroupType::Bulk, false, cmdParent);
-        if (cmdParent) {
-            m_undoStack.push(cmdParent);
+            new DeleteTextCommand(this, selStart, selText, UndoGroupType::Bulk, false, false, cmd);
+            new InsertTextCommand(this, selStart, text, UndoGroupType::Bulk, false, cmd);
+            m_undoStack.push(cmd);
         } else {
             m_undoStack.push(new InsertTextCommand(this, insertPos, text, UndoGroupType::Bulk, false));
         }
@@ -344,7 +341,6 @@ void ScriptEditor::keyPressEvent(QKeyEvent *e)
         bool allowMerge = completionSuffix.isEmpty() && (type == UndoGroupType::Word ||
                    type == UndoGroupType::Whitespace ||
                    type == UndoGroupType::Punctuation);
-        qDebug() << "[ScriptEditor] Pushing InsertTextCommand: pos=" << insertPos << "text='" << insertText << "' type=" << (int)type << "allowMerge=" << allowMerge;
         m_undoStack.push(new InsertTextCommand(this, insertPos, insertText, type, allowMerge));
 
         if (!completionSuffix.isEmpty()) {
@@ -587,7 +583,6 @@ ScriptEditor::ElementType ScriptEditor::currentElement() const
 
 void ScriptEditor::formatDocument()
 {
-    qDebug() << "[ScriptEditor::formatDocument] START";
     QTextDocument *doc = document();
     QTextBlock block = doc->begin();
     QTextCursor cursor(doc);
@@ -609,12 +604,10 @@ void ScriptEditor::formatDocument()
     }
     m_suppressUndo = false;
     cursor.endEditBlock();
-    qDebug() << "[ScriptEditor::formatDocument] END";
 }
 
 void ScriptEditor::undo()
 {
-    qDebug() << "[ScriptEditor] Undo called, undoAvailable:" << m_undoStack.canUndo();
     m_undoStack.undo();
 }
 
@@ -629,7 +622,6 @@ void ScriptEditor::clear()
 
 void ScriptEditor::redo()
 {
-    qDebug() << "[ScriptEditor] Redo called, redoAvailable:" << m_undoStack.canRedo();
     m_undoStack.redo();
 }
 
@@ -986,6 +978,49 @@ QString ScriptEditor::wordUnderCursor(QTextCursor *wordCursor) const
         *wordCursor = cursor;
     }
     return cursor.selectedText();
+}
+
+bool ScriptEditor::replaceCurrent(const QString &replacement)
+{
+    if (m_activeFindIndex < 0 || m_findMatches.isEmpty()) {
+        return false;
+    }
+
+    const Range &range = m_findMatches[m_activeFindIndex];
+    QTextCursor cursor(document());
+    cursor.setPosition(range.start);
+    cursor.setPosition(range.start + range.length, QTextCursor::KeepAnchor);
+
+    auto *cmd = new CompoundCommand("replace");
+    new DeleteTextCommand(this, range.start, normalizeSelectedText(cursor.selectedText()), UndoGroupType::Bulk, false, false, cmd);
+    new InsertTextCommand(this, range.start, replacement, UndoGroupType::Bulk, false, cmd);
+    m_undoStack.push(cmd);
+
+    findNext();
+    return true;
+}
+
+int ScriptEditor::replaceAll(const QString &replacement)
+{
+    if (m_findMatches.isEmpty()) {
+        return 0;
+    }
+
+    const int count = m_findMatches.size();
+    auto *cmd = new CompoundCommand("replace all");
+
+    // Iterate in reverse order so that position changes don't affect lower positions
+    for (int i = count - 1; i >= 0; --i) {
+        const Range &range = m_findMatches[i];
+        QTextCursor cursor(document());
+        cursor.setPosition(range.start);
+        cursor.setPosition(range.start + range.length, QTextCursor::KeepAnchor);
+        new DeleteTextCommand(this, range.start, normalizeSelectedText(cursor.selectedText()), UndoGroupType::Bulk, false, false, cmd);
+        new InsertTextCommand(this, range.start, replacement, UndoGroupType::Bulk, false, cmd);
+    }
+
+    m_undoStack.push(cmd);
+    return count;
 }
 
 void ScriptEditor::replaceRangeText(int start, int length, const QString &replacement)

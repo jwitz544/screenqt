@@ -25,50 +25,36 @@ int InsertTextCommand::id() const { return 1; }
 bool InsertTextCommand::mergeWith(const QUndoCommand *other)
 {
     const auto *o = dynamic_cast<const InsertTextCommand *>(other);
-    
-    qDebug() << "[InsertTextCommand::mergeWith] Attempting merge:";
-    qDebug() << "  Current: pos=" << m_pos << "text='" << m_text << "' type=" << (int)m_type << "allowMerge=" << m_allowMerge;
-    qDebug() << "  Other: pos=" << o->m_pos << "text='" << o->m_text << "' type=" << (int)o->m_type << "allowMerge=" << o->m_allowMerge;
-    
+
     if (!o || !m_allowMerge || !o->m_allowMerge) {
-        qDebug() << "  REJECTED: allowMerge check failed";
         return false;
     }
     if (o->m_pos != m_pos + m_text.length()) {
-        qDebug() << "  REJECTED: position mismatch (expected=" << (m_pos + m_text.length()) << ")";
         return false;
     }
-    
+
     // Allow same type to merge
     if (m_type == o->m_type) {
-        qDebug() << "  ACCEPTED: same type merge";
         m_text += o->m_text;
-        qDebug() << "  Result: text='" << m_text << "' type=" << (int)m_type;
         return true;
     }
-    
+
     // Allow Word to merge with preceding Whitespace (space merges into next word)
-    // But after merging, this becomes a Word command and won't accept more Whitespace
-    if (m_type == ScriptEditor::UndoGroupType::Whitespace && 
+    if (m_type == ScriptEditor::UndoGroupType::Whitespace &&
         o->m_type == ScriptEditor::UndoGroupType::Word) {
-        qDebug() << "  ACCEPTED: Whitespace merging with Word (space + word)";
         m_text += o->m_text;
-        m_type = ScriptEditor::UndoGroupType::Word;  // Change type to Word after merging
-        qDebug() << "  Result: text='" << m_text << "' type=" << (int)m_type << " (changed to Word)";
+        m_type = ScriptEditor::UndoGroupType::Word;
         return true;
     }
 
     // Allow trailing punctuation to merge into the current word (e.g. "hello,")
     if (m_type == ScriptEditor::UndoGroupType::Word &&
         o->m_type == ScriptEditor::UndoGroupType::Punctuation) {
-        qDebug() << "  ACCEPTED: Word merging with trailing punctuation";
         m_text += o->m_text;
         m_type = ScriptEditor::UndoGroupType::Punctuation;
-        qDebug() << "  Result: text='" << m_text << "' type=" << (int)m_type << " (changed to Punctuation)";
         return true;
     }
-    
-    qDebug() << "  REJECTED: no matching merge rule";
+
     return false;
 }
 
